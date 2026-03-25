@@ -6,6 +6,11 @@ const https = require('https');
 const path = require('path');
 const { URL } = require('url');
 const YAML = require('yaml');
+const {
+  DEFAULT_DISCOVERY_PROFILE,
+  resolveDiscoveryProfileTemplate,
+  buildDiscoveryProfileFromTemplate
+} = require('./discovery-profile-templates');
 
 const WORKFLOW_STATES = Object.freeze({
   DISCOVERY_IN_PROGRESS: 'DISCOVERY_IN_PROGRESS',
@@ -101,6 +106,7 @@ class AutonomousScrumOrchestrator {
       available: null,
       reason: ''
     };
+    this.pendingExecutionEvents = [];
     this.setProjectContext(projectId || this.resolveActiveProjectId());
   }
 
@@ -191,6 +197,7 @@ class AutonomousScrumOrchestrator {
     this.saveState(state);
     const nextAction = this.buildNextActions(state, backlog)[0];
     const notificationKind = state.status === WORKFLOW_STATES.READY_FOR_APPROVAL ? 'approval_required' : 'ceremony_update';
+    const executionWarningBullets = this.buildExecutionWarningBullets(discoveryNotes, 1);
     await this.sendDiscordNotification(notificationKind, {
       title: `${profile.projectName}: discovery package ${state.status === WORKFLOW_STATES.AWAITING_USER_INPUT ? 'updated' : 'ready'}`,
       summary: state.status === WORKFLOW_STATES.AWAITING_USER_INPUT
@@ -200,6 +207,7 @@ class AutonomousScrumOrchestrator {
         `📁 Docs: ${this.docsDir}`,
         `❓ Open questions (${state.open_questions.length}): ${state.open_questions.length > 0 ? state.open_questions.slice(0, 3).map(q => typeof q === 'string' ? q : (q.question || JSON.stringify(q))).join(' · ') : 'none'}`,
         `📋 Backlog (${backlog.stories.length} stories): ${backlog.stories.slice(0, 3).map(s => s.title || s.id).join(' · ')}${backlog.stories.length > 3 ? ` (+${backlog.stories.length - 3} more)` : ''}`,
+        ...executionWarningBullets,
         `✅ Next: ${nextAction}`
       ]
     });
@@ -321,7 +329,7 @@ class AutonomousScrumOrchestrator {
     state.updated_at = ceremony.timestamp;
     this.saveState(state);
 
-    await this.sendDailyActivityReport('daily_standup', state, blockers);
+    await this.sendDailyActivityReport('daily_standup', state, blockers, ceremony);
 
     return ceremony;
   }
@@ -406,6 +414,8 @@ class AutonomousScrumOrchestrator {
     this.saveSprintPlan(plan);
     this.saveState(state);
 
+    const executionWarningBullets = this.buildExecutionWarningBullets(planningNotes, 1);
+
     await this.sendDiscordNotification('ceremony_update', {
       title: `${profile.projectName}: ${sprintId} committed`,
       summary: `Sprint **${sprintId}** locked — ${sprintStories.length} stories, ${plannedPoints}/${teamCapacityPoints} pts committed.`,
@@ -413,6 +423,7 @@ class AutonomousScrumOrchestrator {
         `🎯 Goal: ${plan.sprint_goal}`,
         `📋 Stories (${sprintStories.length}): ${sprintStories.slice(0, 5).map(s => `${s.id} (${s.story_points}pt)`).join(' · ')}${sprintStories.length > 5 ? ` +${sprintStories.length - 5} more` : ''}`,
         `⚡ Capacity: ${plannedPoints}/${teamCapacityPoints} pts — ${plan.capacity_check.fits_capacity ? 'fits ✓' : 'over capacity ⚠️'}`,
+        ...executionWarningBullets,
         `▶️ Daily standups are now active`
       ]
     });
@@ -458,6 +469,7 @@ class AutonomousScrumOrchestrator {
     };
 
     this.saveCeremonyRecord('qc-sync', `qc-sync-${this.todayStamp()}.json`, report);
+    const executionWarningBullets = this.buildExecutionWarningBullets(qcSyncNotes, 1);
     await this.sendDiscordNotification('ceremony_update', {
       title: `${state.project_name || this.titleizeProjectId(this.projectId)}: QC sync — ${state.current_sprint_id || 'no sprint'}`,
       summary: `QC sync for sprint **${state.current_sprint_id || 'none'}** — ${report.developer.completed_today.length} done, ${report.developer.active_work.length} active.`,
@@ -466,6 +478,7 @@ class AutonomousScrumOrchestrator {
         `🔧 In progress: ${report.developer.active_work.join(', ') || 'none'}`,
         `🧪 Scenarios ready: ${report.qc.scenarios_ready.length} stories covered`,
         `🚧 Blockers: ${report.developer.blockers.length > 0 ? report.developer.blockers.join('; ') : 'none'}`,
+        ...executionWarningBullets,
         `⚠️ Release risks: ${report.qc.release_risks.length > 0 ? report.qc.release_risks.join('; ') : 'none'}`
       ]
     });
@@ -538,6 +551,8 @@ class AutonomousScrumOrchestrator {
         qc_summary: qcResult.summary,
         dev_files: story.dev_files,
         test_files: story.test_files,
+        dev_execution: devResult.execution,
+        qc_execution: qcResult.execution,
         status: reviewStatus
       });
     }
@@ -632,6 +647,7 @@ class AutonomousScrumOrchestrator {
     const flaggedCount = (poDebrief.flagged || []).length;
     const completedCount = implementationLog.filter(entry => entry.status === 'DONE').length;
     const reviewCount = implementationLog.filter(entry => entry.status === reviewStatus).length;
+    const executionWarningBullets = this.buildExecutionWarningBullets({ implementationLog, pmDebrief, poDebrief }, 1);
 
     await this.sendDiscordNotification('ceremony_update', {
       title: `${profile.projectName}: ${sprintStories.length} ${sprintStories.length === 1 ? 'story' : 'stories'} implemented`,
@@ -641,6 +657,7 @@ class AutonomousScrumOrchestrator {
           `${e.status === 'DONE' ? '\u2705' : '\uD83D\uDD0D'} ${e.story_id}: ${e.dev_files.length} src, ${e.test_files.length} tests \u2014 ${e.dev_summary}`
         ),
         `\uD83E\uDDEA Validation: ${validationResult.summary}`,
+        ...executionWarningBullets,
         `\uD83D\uDCCB PM: ${pmDebrief.summary}`,
         flaggedCount > 0
           ? `\u26A0\uFE0F PO flagged ${flaggedCount} ${flaggedCount === 1 ? 'story' : 'stories'}: ${(poDebrief.flagged || []).map(f => typeof f === 'string' ? f : `${f.story_id} (${f.reason})`).join(', ')}`
@@ -957,7 +974,9 @@ class AutonomousScrumOrchestrator {
     };
 
     this.saveCeremonyRecord('digests', `daily-digest-${this.todayStamp()}.json`, digest);
-    await this.sendDailyActivityReport('daily_digest', state, blockers);
+    state.updated_at = digest.timestamp;
+    this.saveState(state);
+    await this.sendDailyActivityReport('daily_digest', state, blockers, pmDigest);
     return digest;
   }
 
@@ -1046,6 +1065,8 @@ class AutonomousScrumOrchestrator {
       agent_responses: agentResponses
     };
 
+    const executionWarningBullets = this.buildExecutionWarningBullets(agentResponses, 1);
+
     await this.sendDiscordNotification('ceremony_update', {
       title: `${profile.projectName}: ${normalizedType} feedback received`,
       summary: normalizedType === 'business'
@@ -1055,6 +1076,7 @@ class AutonomousScrumOrchestrator {
         `Type: ${normalizedType}`,
         `Message: ${normalizedMessage.slice(0, 120)}${normalizedMessage.length > 120 ? '...' : ''}`,
         `Approval status: ${state.approval.status}`,
+        ...executionWarningBullets,
         `Next: ${this.buildNextActions(state, backlog)[0]}`
       ]
     });
@@ -1279,91 +1301,22 @@ class AutonomousScrumOrchestrator {
 
   buildDiscoveryProfile(idea) {
     const normalizedIdea = (idea || '').trim();
-    const loweredIdea = normalizedIdea.toLowerCase();
     const projectName = this.deriveProjectName(normalizedIdea || this.titleizeProjectId(this.projectId));
-
-    if (/(e-?commerce|ecommercial|amazon|marketplace|storefront|shopping)/.test(loweredIdea)) {
-      return {
-        projectName: loweredIdea.includes('amazon') ? 'Amazon-Style Ecommerce App' : 'Ecommerce App',
-        problem_statement: 'Shoppers need a fast and trustworthy way to discover products, compare options, and complete purchases with confidence across catalog, cart, and fulfillment flows.',
-        business_goals: [
-          'Launch an ecommerce MVP with strong catalog discovery, cart conversion, and checkout reliability.',
-          'Create a foundation for repeat purchase behavior through account, order history, and fulfillment visibility.',
-          'Support marketplace-style growth later without overbuilding seller or logistics complexity in the first release.'
-        ],
-        core_capabilities: [
-          'Catalog discovery, search, and merchandising',
-          'Product detail pages with inventory and pricing signals',
-          'Cart, checkout, and payment orchestration',
-          'Order tracking, returns, and customer support workflows'
-        ],
-        personas: [
-          'Consumer shopper comparing products and prices quickly',
-          'Operations or merchandising manager monitoring inventory and promotions',
-          'Support or QC reviewer validating checkout, fulfillment, and post-purchase flows'
-        ],
-        assumptions: [
-          'The first release can start as a single-storefront ecommerce product rather than a full third-party marketplace.',
-          'Card payments and cashless checkout are the initial priority over complex financing options.',
-          'Fulfillment can begin with one primary region and a simplified returns workflow.'
-        ],
-        openQuestions: [
-          'Will the MVP support only first-party inventory or also third-party sellers?',
-          'Which payment methods and regions must be supported on day one?',
-          'What are the service-level expectations for delivery, returns, and support response time?'
-        ],
-        technical_direction: [
-          'Separate catalog, cart, checkout, order, and support domains so delivery can happen in vertical slices.',
-          'Treat pricing, inventory, and checkout as consistency-sensitive paths with clear auditability.',
-          'Instrument search-to-cart, cart-to-checkout, and checkout-to-order conversion funnels from the start.'
-        ],
-        qc_focus: [
-          'Search relevance, filtering, and merchandising edge cases',
-          'Cart persistence, pricing integrity, and promotion application',
-          'Checkout, payment failure handling, and order confirmation reliability',
-          'Order tracking, return authorization, and customer-support escalation paths'
-        ]
-      };
+    const matchedTemplate = resolveDiscoveryProfileTemplate(normalizedIdea);
+    if (matchedTemplate) {
+      return buildDiscoveryProfileFromTemplate(matchedTemplate, normalizedIdea, projectName);
     }
 
     return {
       projectName,
       problem_statement: `Users need ${normalizedIdea || 'this product'} to solve a clear workflow problem with enough quality and documentation for iterative Scrum delivery.`,
-      business_goals: [
-        'Define a focused MVP that can be validated with real users.',
-        'Create an implementation-ready backlog with explicit approval gates.',
-        'Establish QC coverage before development starts.'
-      ],
-      core_capabilities: [
-        'User-facing product flows',
-        'Core business logic and data model',
-        'Operational visibility and exception handling'
-      ],
-      personas: [
-        'Primary end user',
-        'Internal business operator',
-        'QC or support reviewer'
-      ],
-      assumptions: [
-        'The first release should optimize for clarity over breadth.',
-        'A single active project is managed at a time through the OpenClaw workflow.',
-        'Discord is the default daily reporting channel.'
-      ],
-      openQuestions: [
-        'Who is the highest-priority user segment for the MVP?',
-        'What non-functional targets matter most for launch?',
-        'Which integrations are mandatory in phase one?'
-      ],
-      technical_direction: [
-        'Separate product, delivery, and QC artifacts by design.',
-        'Keep the architecture deployable in small vertical slices.',
-        'Track workflow state in docs so PM can pause and resume cleanly.'
-      ],
-      qc_focus: [
-        'Critical path scenarios',
-        'Validation of business rules',
-        'Release readiness and regression coverage'
-      ]
+      business_goals: [...DEFAULT_DISCOVERY_PROFILE.business_goals],
+      core_capabilities: [...DEFAULT_DISCOVERY_PROFILE.core_capabilities],
+      personas: [...DEFAULT_DISCOVERY_PROFILE.personas],
+      assumptions: [...DEFAULT_DISCOVERY_PROFILE.assumptions],
+      openQuestions: [...DEFAULT_DISCOVERY_PROFILE.openQuestions],
+      technical_direction: [...DEFAULT_DISCOVERY_PROFILE.technical_direction],
+      qc_focus: [...DEFAULT_DISCOVERY_PROFILE.qc_focus]
     };
   }
 
@@ -1912,14 +1865,24 @@ class AutonomousScrumOrchestrator {
     const skillContext = role ? this.loadRoleSkill(role) : '';
     if (skillContext) prompt = prompt + skillContext;
     const safeFallback = { ...fallback };
-    let source = 'template';
+    let execution = {
+      source: (runnerConfig.mode || 'auto') === 'template' ? 'template_mode' : 'template_fallback',
+      degraded: (runnerConfig.mode || 'auto') !== 'template',
+      reason: (runnerConfig.mode || 'auto') === 'template' ? 'configured_template_mode' : 'runner_not_attempted'
+    };
     let candidate = {};
     let runnerError = '';
 
     if (this.shouldAttemptOpenClawRunner(runnerConfig)) {
       try {
         candidate = this.executeOpenClawTurn({ role, ceremony, prompt, context }, runnerConfig);
-        source = 'openclaw';
+        const candidateMeta = this.extractTurnExecutionMeta(candidate);
+        candidate = this.stripTurnExecutionMeta(candidate);
+        execution = candidateMeta || {
+          source: 'openclaw',
+          degraded: false,
+          reason: ''
+        };
         this.openClawRunnerStatus = {
           attempted: true,
           available: true,
@@ -1935,25 +1898,43 @@ class AutonomousScrumOrchestrator {
           };
         }
 
+        execution = {
+          source: 'template_fallback',
+          degraded: true,
+          reason: this.isRunnerUnavailableError(error) ? 'runner_unavailable' : 'runner_error'
+        };
+
         if (runnerConfig.fallback_to_templates === false && (runnerConfig.mode || 'auto') !== 'template') {
           throw new Error(`OpenClaw runner failed for ${role} during ${ceremony}: ${error.message}`);
         }
       }
+    } else if ((runnerConfig.mode || 'auto') !== 'template') {
+      execution = {
+        source: 'template_fallback',
+        degraded: true,
+        reason: this.openClawRunnerStatus.available === false ? 'runner_previously_unavailable' : 'runner_not_attempted'
+      };
     }
 
     const normalized = normalize ? normalize(candidate, safeFallback) : { ...safeFallback };
     const result = {
       ...safeFallback,
       ...normalized,
-      source
+      source: execution.source,
+      execution
     };
 
     if (runnerError) {
       result.runner_error = runnerError;
+      result.execution.runner_error = runnerError;
     }
 
     if (runnerConfig.save_transcripts !== false && this.docsDir) {
       this.saveAgentTurnTranscript(ceremony, role, prompt, context, result);
+    }
+
+    if (execution.degraded) {
+      this.noteTurnExecutionEvent(ceremony, role, result.execution);
     }
 
     return result;
@@ -2032,13 +2013,24 @@ class AutonomousScrumOrchestrator {
 
     const stdout = (result.stdout || '').trim();
     if (!stdout) {
-      return {};
+      return {
+        __turnMeta: {
+          source: 'partial_parse_fallback',
+          degraded: true,
+          reason: 'empty_runner_output'
+        }
+      };
     }
 
     try {
       return JSON.parse(stdout);
     } catch (error) {
       return {
+        __turnMeta: {
+          source: 'partial_parse_fallback',
+          degraded: true,
+          reason: 'non_json_runner_output'
+        },
         summary: stdout,
         bullets: [stdout]
       };
@@ -2104,6 +2096,11 @@ class AutonomousScrumOrchestrator {
       parsed = JSON.parse(stdout);
     } catch (error) {
       return {
+        __turnMeta: {
+          source: 'partial_parse_fallback',
+          degraded: true,
+          reason: 'non_json_agent_output'
+        },
         summary: stdout,
         bullets: [stdout]
       };
@@ -2123,6 +2120,11 @@ class AutonomousScrumOrchestrator {
         return JSON.parse(jsonText);
       } catch (error) {
         return {
+          __turnMeta: {
+            source: 'partial_parse_fallback',
+            degraded: true,
+            reason: 'invalid_json_payload'
+          },
           summary: responseText,
           bullets: [responseText]
         };
@@ -2130,9 +2132,30 @@ class AutonomousScrumOrchestrator {
     }
 
     return {
+      __turnMeta: {
+        source: 'partial_parse_fallback',
+        degraded: true,
+        reason: 'non_json_payload_text'
+      },
       summary: responseText,
       bullets: [responseText]
     };
+  }
+
+  extractTurnExecutionMeta(candidate) {
+    return candidate && typeof candidate === 'object' && !Array.isArray(candidate) && candidate.__turnMeta
+      ? candidate.__turnMeta
+      : null;
+  }
+
+  stripTurnExecutionMeta(candidate) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) || !candidate.__turnMeta) {
+      return candidate;
+    }
+
+    const stripped = { ...candidate };
+    delete stripped.__turnMeta;
+    return stripped;
   }
 
   extractOpenClawPayloadText(parsed) {
@@ -2456,7 +2479,7 @@ class AutonomousScrumOrchestrator {
     }, {});
   }
 
-  async sendDailyActivityReport(source, state, blockers) {
+  async sendDailyActivityReport(source, state, blockers, executionContext) {
     const backlog = this.loadBacklog();
     const bullets = [
       `Project: ${state.project_name || this.titleizeProjectId(this.projectId)}`,
@@ -2472,6 +2495,9 @@ class AutonomousScrumOrchestrator {
     if (this.getConfigValue(this.discordConfig, ['discord', 'message_settings', 'include_next_steps'])) {
       bullets.push(`Next: ${this.buildNextActions(state, backlog)[0]}`);
     }
+
+    const executionWarningBullets = this.buildExecutionWarningBullets(executionContext, 1);
+    bullets.push(...executionWarningBullets);
 
     await this.sendDiscordNotification('daily_digest', {
       title: `${state.project_name || this.titleizeProjectId(this.projectId)}: ${source}`,
@@ -2724,6 +2750,7 @@ class AutonomousScrumOrchestrator {
         assumptions: [],
         open_questions: [],
         resolved_open_questions: [],
+        execution_health: this.buildDefaultExecutionHealth(),
         current_sprint_id: null,
         updated_at: new Date().toISOString()
       };
@@ -2736,12 +2763,19 @@ class AutonomousScrumOrchestrator {
     if (!Array.isArray(loaded.resolved_open_questions)) {
       loaded.resolved_open_questions = [];
     }
+    if (!loaded.execution_health || typeof loaded.execution_health !== 'object') {
+      loaded.execution_health = this.buildDefaultExecutionHealth();
+    } else {
+      loaded.execution_health = this.normalizeExecutionHealth(loaded.execution_health);
+    }
 
     return loaded;
   }
 
   saveState(state) {
+    state.execution_health = this.applyPendingExecutionEvents(state.execution_health);
     this.writeJson(this.stateFilePath(), state);
+    this.writeExecutionHealthDoc(state);
   }
 
   loadBacklog() {
@@ -2776,7 +2810,11 @@ class AutonomousScrumOrchestrator {
   }
 
   saveCeremonyRecord(category, fileName, payload) {
-    this.writeJson(path.join(this.docsDir, 'ceremonies', category, fileName), payload);
+    const executionHealth = this.summarizeExecutionMetadata(payload);
+    const enrichedPayload = executionHealth.total_turns > 0
+      ? { ...payload, execution_health: executionHealth }
+      : payload;
+    this.writeJson(path.join(this.docsDir, 'ceremonies', category, fileName), enrichedPayload);
   }
 
   stateFilePath() {
@@ -2815,6 +2853,141 @@ class AutonomousScrumOrchestrator {
 
   isStoryActive(story) {
     return story && (story.status === 'IN_SPRINT' || story.status === 'REVIEW');
+  }
+
+  buildDefaultExecutionHealth() {
+    return {
+      degraded_events: 0,
+      last_event_at: null,
+      last_degraded_event: null,
+      recent_degraded_events: []
+    };
+  }
+
+  normalizeExecutionHealth(executionHealth) {
+    const normalized = {
+      ...this.buildDefaultExecutionHealth(),
+      ...(executionHealth || {})
+    };
+
+    if (!Array.isArray(normalized.recent_degraded_events)) {
+      normalized.recent_degraded_events = [];
+    }
+
+    return normalized;
+  }
+
+  noteTurnExecutionEvent(ceremony, role, execution) {
+    this.pendingExecutionEvents.push({
+      ceremony,
+      role,
+      ...execution,
+      occurred_at: new Date().toISOString()
+    });
+  }
+
+  applyPendingExecutionEvents(executionHealth) {
+    const normalized = this.normalizeExecutionHealth(executionHealth);
+
+    if (this.pendingExecutionEvents.length === 0) {
+      return normalized;
+    }
+
+    this.pendingExecutionEvents.forEach(event => {
+      normalized.degraded_events += 1;
+      normalized.last_event_at = event.occurred_at;
+      normalized.last_degraded_event = event;
+      normalized.recent_degraded_events.push(event);
+    });
+
+    normalized.recent_degraded_events = normalized.recent_degraded_events.slice(-10);
+    this.pendingExecutionEvents = [];
+    return normalized;
+  }
+
+  writeExecutionHealthDoc(state) {
+    if (!this.docsDir) {
+      return;
+    }
+
+    const executionHealth = this.normalizeExecutionHealth(state.execution_health);
+    const recent = executionHealth.recent_degraded_events;
+    const recentSection = recent.length > 0
+      ? recent.slice().reverse().map((event, index) => `${index + 1}. [${event.ceremony}/${event.role}] ${event.source}${event.reason ? ` — ${event.reason}` : ''}${event.runner_error ? ` — ${event.runner_error}` : ''}`).join('\n')
+      : 'None.';
+
+    this.writeMarkdown(
+      path.join(this.docsDir, 'execution-health.md'),
+      `# Execution Health\n\n- Degraded events recorded: ${executionHealth.degraded_events}\n- Last degraded event at: ${executionHealth.last_event_at || 'None'}\n\n## Recent Degraded Events\n\n${recentSection}\n\n## Working Rule\n\nOpenClaw turns should normally report \`source: openclaw\`. Template fallback or partial parse fallback means the workflow continued in degraded mode and should be reviewed before relying on the output blindly.\n`
+    );
+  }
+
+  isExecutionMetadata(value) {
+    return Boolean(
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      typeof value.source === 'string' &&
+      typeof value.degraded === 'boolean'
+    );
+  }
+
+  summarizeExecutionMetadata(payload) {
+    const degradedTurns = [];
+    let totalTurns = 0;
+
+    const visit = (value, pathParts = []) => {
+      if (!value || typeof value !== 'object') {
+        return;
+      }
+
+      if (this.isExecutionMetadata(value)) {
+        totalTurns += 1;
+        if (value.degraded) {
+          degradedTurns.push({
+            source: value.source,
+            reason: value.reason || '',
+            runner_error: value.runner_error || '',
+            path: pathParts.join('.') || 'root'
+          });
+        }
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach((item, index) => visit(item, [...pathParts, String(index)]));
+        return;
+      }
+
+      Object.entries(value).forEach(([key, child]) => {
+        visit(child, [...pathParts, key]);
+      });
+    };
+
+    visit(payload);
+
+    return {
+      total_turns: totalTurns,
+      degraded_turns_count: degradedTurns.length,
+      degraded_turns: degradedTurns.slice(0, 10)
+    };
+  }
+
+  buildExecutionWarningBullets(payload, maxDetails = 1) {
+    const executionHealth = this.summarizeExecutionMetadata(payload);
+    if (executionHealth.degraded_turns_count === 0) {
+      return [];
+    }
+
+    const detailBullets = executionHealth.degraded_turns.slice(0, maxDetails).map(turn => {
+      const reason = turn.reason ? ` (${turn.reason})` : '';
+      return `Execution fallback: ${turn.source}${reason}`;
+    });
+
+    return [
+      `Execution degraded in ${executionHealth.degraded_turns_count} turn${executionHealth.degraded_turns_count === 1 ? '' : 's'}. See docs/execution-health.md for details.`,
+      ...detailBullets
+    ];
   }
 
   buildOpenQuestions(...questionLists) {
@@ -2922,11 +3095,6 @@ class AutonomousScrumOrchestrator {
   }
 
   deriveProjectId(input) {
-    const loweredInput = String(input || '').toLowerCase();
-    if (/(e-?commerce|ecommercial|amazon|marketplace|storefront|shopping)/.test(loweredInput)) {
-      return 'ecommerce-app';
-    }
-
     const slug = this.deriveProjectName(input)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
@@ -2937,7 +3105,6 @@ class AutonomousScrumOrchestrator {
 
   deriveProjectName(input) {
     const normalized = String(input || '')
-      .replace(/ecommercial/gi, 'ecommerce')
       .replace(/^i want to\s+/i, '')
       .replace(/^(build|create|make|design|develop)\s+/i, '')
       .replace(/^(an?|the)\s+/i, '')
@@ -3019,13 +3186,13 @@ Feedback options:
   --type technical    Technical feedback: architecture, patterns, tech stack, implementation approach
 
 Examples:
-  node .openclaw/orchestrator.js start-idea --idea "Build an ecommerce app like Amazon"
-  node .openclaw/orchestrator.js feedback ecommerce-app --type business --message "Drop third-party sellers. Stripe only, Thailand only."
-  node .openclaw/orchestrator.js feedback ecommerce-app --type technical --message "Use event sourcing for the order domain instead of direct DB writes."
-  node .openclaw/orchestrator.js request-approval ecommerce-app
-  node .openclaw/orchestrator.js approve ecommerce-app
-  node .openclaw/orchestrator.js sprint-planning ecommerce-app
-  node .openclaw/orchestrator.js daily-digest ecommerce-app
+  node .openclaw/orchestrator.js start-idea --idea "Build a customer feedback portal"
+  node .openclaw/orchestrator.js feedback customer-feedback-portal --type business --message "Prioritize workspace admins first. Email notifications only in v1."
+  node .openclaw/orchestrator.js feedback customer-feedback-portal --type technical --message "Use PostgreSQL and background jobs for report exports."
+  node .openclaw/orchestrator.js request-approval customer-feedback-portal
+  node .openclaw/orchestrator.js approve customer-feedback-portal
+  node .openclaw/orchestrator.js sprint-planning customer-feedback-portal
+  node .openclaw/orchestrator.js daily-digest customer-feedback-portal
   `);
 }
 

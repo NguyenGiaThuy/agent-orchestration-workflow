@@ -49,6 +49,16 @@ validation:
 
 When validation is enabled, implementation moves stories into `REVIEW` first, runs the validation command, and only marks stories `DONE` when validation passes and acceptance succeeds. Without validation, stories remain in `REVIEW` until they are manually confirmed.
 
+## Execution Health
+
+The orchestrator records degraded agent turns in `docs/workflow-state.json` under `execution_health` and writes a human-readable summary to `docs/execution-health.md`.
+
+- `openclaw` means the turn executed normally through the configured runner.
+- `template_fallback` means the workflow continued with the built-in fallback output because the runner failed or was unavailable.
+- `partial_parse_fallback` means the runner executed, but the returned output could not be parsed as the expected JSON shape.
+
+Ceremony records also include an `execution_health` summary when any turn metadata is present.
+
 ## discord-config.yml
 
 ```yaml
@@ -85,6 +95,14 @@ Defines the 4 role personas. Each role has:
 - `capabilities` — symbolic capability labels for maintainers and prompts. These are not auto-bound runtime tools; executable tools still come from the OpenClaw agent configuration and the orchestrator command handlers.
 
 Roles: `pm`, `po`, `developer`, `qc`
+
+## discovery-profile-templates.js
+
+Domain-specific discovery defaults live in `assets/openclaw-template/discovery-profile-templates.js`.
+
+- `DEFAULT_DISCOVERY_PROFILE` holds the generic fallback used when no domain template matches.
+- `DISCOVERY_PROFILE_TEMPLATES` is empty by default so the shipped skill stays domain-neutral; maintainers can add optional domain overrides later if they need them.
+- `orchestrator.js` matches templates by keyword and materializes the final discovery profile without expanding prompt size.
 
 ## ceremonies.yml
 

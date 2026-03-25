@@ -1,7 +1,7 @@
 # Runtime settings for the active OpenClaw Scrum workflow.
 
 project:
-  active: "ecommerce-app"
+  active: ""
 
 storage:
   docs_dir: "docs"

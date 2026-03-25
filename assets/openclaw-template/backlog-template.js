@@ -6,7 +6,7 @@
  */
 
 const backlogTemplate = {
-  project_id: "ecommerce-app",
+  project_id: "sample-project",
   workflow_status: "READY_FOR_APPROVAL",
   approval_status: "PENDING",
   created_at: "2026-03-18",
@@ -15,37 +15,37 @@ const backlogTemplate = {
   epics: [
     {
       id: "EPIC-1",
-      title: "Catalog discovery and merchandising",
+      title: "Core user workflow definition",
       owner: "po",
       priority: "MUST_HAVE",
-      description: "Create a product discovery experience that helps shoppers find, compare, and shortlist the right items quickly.",
+      description: "Define the smallest end-to-end user journey that proves the product's core value.",
       acceptance_criteria: [
-        "Shoppers can browse catalog categories, search products, and apply core filters",
-        "Merchandising priorities and sort rules are explicit",
-        "PO can explain why the initial discovery flow is enough for MVP"
+        "The primary user can complete the main workflow from entry to outcome",
+        "Scope boundaries and out-of-scope behaviors are documented",
+        "PO can explain why this journey is enough for the MVP"
       ]
     },
     {
       id: "EPIC-2",
-      title: "Cart and checkout conversion",
+      title: "Implementation foundation and vertical slices",
       owner: "developer",
       priority: "MUST_HAVE",
-      description: "Deliver the smallest reliable path from product detail to order placement.",
+      description: "Deliver the smallest reliable implementation slice with clear state, data, and error handling.",
       acceptance_criteria: [
-        "Shoppers can add products to cart and review totals before checkout",
-        "Checkout captures address, payment, and order confirmation",
-        "DEV can deliver the flow in sprint-sized slices"
+        "The core workflow is decomposed into sprint-sized implementation slices",
+        "Key state transitions and data ownership are explicit",
+        "DEV can deliver the flow incrementally without blocking QC"
       ]
     },
     {
       id: "EPIC-3",
-      title: "Post-purchase reliability and quality control",
+      title: "Quality control and release readiness",
       owner: "qc",
       priority: "MUST_HAVE",
-      description: "Make order accuracy, payment reliability, and support readiness visible from the first release.",
+      description: "Make validation, exception handling, and release readiness visible from the first release.",
       acceptance_criteria: [
-        "Shoppers can view order status and request support or returns",
-        "QC scenarios exist for all critical purchase and fulfillment flows",
+        "QC scenarios exist for all critical user and operator flows",
+        "Exception handling and recovery paths are covered",
         "Release readiness cannot be claimed without QC evidence"
       ]
     }
@@ -55,12 +55,12 @@ const backlogTemplate = {
     {
       id: "STORY-1",
       epic_id: "EPIC-1",
-      title: "As a shopper, I want to browse and search the catalog, so that I can discover products quickly.",
-      description: "PO defines the minimum catalog taxonomy, search behavior, and filter set needed for the MVP.",
+      title: "As a primary user, I want to complete the core workflow, so that I can realize the product's main value quickly.",
+      description: "PO defines the minimum end-to-end journey, decision points, and outcomes needed for the MVP.",
       acceptance_criteria: [
-        "Catalog browsing supports category navigation, search, and basic filtering",
-        "Product cards show the most important merchandising signals",
-        "PO confirms the discovery flow covers the MVP shopping journey"
+        "The user can move through the core flow without dead ends",
+        "The most important decision points and success states are explicit",
+        "PO confirms the journey covers the MVP's primary outcome"
       ],
       definition_of_done: [
         "Code reviewed by peer",
@@ -68,11 +68,11 @@ const backlogTemplate = {
         "QC onboarding scenarios executed",
         "Documentation updated in docs/"
       ],
-      po_notes: "MUST_HAVE for shopper activation.",
-      technical_notes: "Keep search and category APIs modular so ranking and personalization can evolve later.",
+      po_notes: "MUST_HAVE because it proves the product's main value.",
+      technical_notes: "Keep the core workflow modular so follow-up capabilities can extend it without a rewrite.",
       qc_scenarios: [
-        "Validate search, filter, and category combinations return consistent product sets",
-        "Validate merchandising badges and pricing are rendered consistently"
+        "Validate the happy path completes successfully from start to finish",
+        "Validate incomplete or invalid user inputs fail safely with clear recovery guidance"
       ],
       story_points: 5,
       estimate_confidence: 0.85,
@@ -87,12 +87,12 @@ const backlogTemplate = {
     {
       id: "STORY-2",
       epic_id: "EPIC-2",
-      title: "As a shopper, I want accurate product detail pages, so that I can decide whether to add an item to cart.",
-      description: "DEV breaks the catalog-to-detail journey into the smallest usable delivery slice.",
+      title: "As an internal operator, I want visibility into workflow state and core records, so that I can support the product reliably.",
+      description: "DEV breaks operational visibility into the smallest usable delivery slice that supports the main workflow.",
       acceptance_criteria: [
-        "Product details include price, stock state, delivery estimate, and key product attributes",
-        "Inventory and pricing signals remain consistent between list and detail views",
-        "DEV documents the detail-page slice and known consistency risks"
+        "Key workflow state and records can be reviewed in one place",
+        "Operational visibility stays consistent with the primary user workflow",
+        "DEV documents the slice and known consistency risks"
       ],
       definition_of_done: [
         "Code reviewed",
@@ -100,11 +100,11 @@ const backlogTemplate = {
         "QC matching scenarios executed",
         "No unresolved sprint blocker remains"
       ],
-      po_notes: "MUST_HAVE for informed purchase decisions.",
-      technical_notes: "Treat price and stock reads as consistency-sensitive and auditable.",
+      po_notes: "MUST_HAVE for supportability and controlled rollout.",
+      technical_notes: "Treat state changes and audit fields as consistency-sensitive and observable.",
       qc_scenarios: [
-        "Validate price and inventory updates do not drift between search and detail views",
-        "Validate unavailable products cannot be added to cart from stale detail pages"
+        "Validate state changes are reflected consistently in operator-facing views",
+        "Validate stale or invalid records cannot be acted on silently"
       ],
       story_points: 8,
       estimate_confidence: 0.75,
@@ -119,12 +119,12 @@ const backlogTemplate = {
     {
       id: "STORY-3",
       epic_id: "EPIC-3",
-      title: "As a shopper, I want to complete checkout reliably, so that I can place an order with confidence.",
-      description: "QC and DEV align on cart, payment, and confirmation boundaries before the checkout flow is released.",
+      title: "As the delivery team, we want validation and release checks, so that each increment is safe to ship.",
+      description: "QC and DEV align on validation, regression coverage, and exception handling before the first release.",
       acceptance_criteria: [
-        "Cart totals, discounts, shipping, and taxes are calculated consistently",
-        "Checkout captures shipping, payment, and order confirmation without data loss",
-        "QC confirms the critical checkout scenarios are covered before release"
+        "Automated or documented validation exists for the highest-risk paths",
+        "Failures and recovery paths are exercised before release",
+        "QC confirms the critical scenarios are covered before release"
       ],
       definition_of_done: [
         "Code reviewed",
@@ -132,11 +132,11 @@ const backlogTemplate = {
         "QC messaging scenarios executed or automated",
         "Release risks documented"
       ],
-      po_notes: "MUST_HAVE for core revenue capture.",
-      technical_notes: "Use idempotent order placement and payment handoff so retries do not create duplicate orders.",
+      po_notes: "MUST_HAVE because release confidence depends on it.",
+      technical_notes: "Use repeatable validation and safe retry behavior so failures do not corrupt workflow state.",
       qc_scenarios: [
-        "Validate payment failures do not create confirmed orders",
-        "Validate cart totals remain stable from review screen through confirmation"
+        "Validate failures do not leave the system in a partially completed state",
+        "Validate the release checklist catches regressions in the core workflow"
       ],
       story_points: 8,
       estimate_confidence: 0.7,
@@ -152,11 +152,11 @@ const backlogTemplate = {
       id: "STORY-4",
       type: "BUG_FIX",
       epic_id: "EPIC-3",
-      title: "Fix: cart totals diverge after a promotion is applied at checkout",
-      description: "QC identified a revenue-impacting issue where the checkout summary does not match the cart review total after a promotion is applied.",
+      title: "Fix: workflow status diverges between user-facing and operator-facing views",
+      description: "QC identified a high-impact issue where the visible workflow status does not stay consistent across the main experience and the operational view.",
       acceptance_criteria: [
-        "Cart and checkout totals match after promotions are applied",
-        "Order confirmation reflects the same final amount captured at payment time",
+        "Workflow status remains consistent across all supported views after updates",
+        "User-visible confirmations reflect the same final state stored by the system",
         "QC can reproduce the fix and close the defect"
       ],
       severity: "HIGH",
@@ -176,23 +176,23 @@ const backlogTemplate = {
     method: "MoSCoW",
     description: "Must-have, Should-have, Could-have, Won't-have",
     must_have: [
-      "STORY-1: Catalog discovery and search",
-      "STORY-2: Product detail integrity",
-      "STORY-3: Checkout reliability",
-      "STORY-4: Promotion-total consistency fix"
+      "STORY-1: Core workflow completion",
+      "STORY-2: Operational visibility",
+      "STORY-3: Validation and release readiness",
+      "STORY-4: Workflow-status consistency fix"
     ],
     should_have: [
-      "Order tracking and self-service support",
-      "Saved carts or wishlists"
+      "Self-service support tooling",
+      "Secondary workflow enhancements"
     ],
     could_have: [
-      "Personalized recommendations",
-      "Advanced merchandising experiments"
+      "Automation for low-risk operator tasks",
+      "Advanced analytics and experimentation"
     ],
     wont_have_now: [
-      "Third-party seller marketplace management",
-      "Complex financing or buy-now-pay-later flows",
-      "Multi-region launch support"
+      "Large workflow rewrites before MVP validation",
+      "Complex multi-tenant or multi-region expansion",
+      "Nice-to-have automations that do not affect the core workflow"
     ]
   },
 
