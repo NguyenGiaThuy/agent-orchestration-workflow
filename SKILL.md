@@ -73,6 +73,23 @@ To get a webhook URL:
 
 Before asking, run `openclaw models list` (or `wsl openclaw models list` on Windows). Parse the tabular output: the first column of each data row is the model ID; the row tagged `default` is the default model. **Never hardcode model names** — always use the live output. If the command fails, fall back to asking the user to type a model ID freely.
 
+> "Which AI model should each role use? Available models:
+> 1. \<first model id\>  *(default)*
+> 2. \<second model id\>
+> ... [full list from `openclaw models list`]
+>
+> Press Enter to use the default for any role.
+> - PM  (Project Manager): ___
+> - PO  (Product Owner):   ___
+> - DEV (Developer):       ___
+> - QC  (Quality Control): ___"
+
+- Accept a number or full model ID string; Enter = default model.
+- If the user answers all at once (one line per role), parse their answers.
+- Store as `$MODEL_PM`, `$MODEL_PO`, `$MODEL_DEV`, `$MODEL_QC`.
+
+---
+
 **Question 5 — Skills per role** *(optional)*
 
 Before asking, do the following:
@@ -84,20 +101,7 @@ Before asking, do the following:
    - **DEV**: prefer skills mentioning full-stack, coding, implementation, or the tech stack implied by the project idea
    - **QC**: prefer skills mentioning testing, quality, e2e, validation, or test automation
 
-> **Q4 and Q5 are always presented together in one message.** Run both preparatory commands first, then ask models and skills in a single block:
-
-> "Which AI model should each role use? Available models:
-> 1. \<first model id\>  *(default)*
-> 2. \<second model id\>
-> ... [full list from `openclaw models list`]
->
-> Press Enter to use the default for any role.
-> - PM  (Project Manager): ___
-> - PO  (Product Owner):   ___
-> - DEV (Developer):       ___
-> - QC  (Quality Control): ___
->
-> Available skills:
+> "Available skills:
 >  1. \<skill-name\>
 >  ... [full numbered list from `ls ~/.agents/skills/`]
 >  0. none
@@ -108,14 +112,9 @@ Before asking, do the following:
 > - DEV skill: `<proposed or none>` — *<one-line reason>*
 > - QC  skill: `<proposed or none>` — *<one-line reason>*
 >
-> Press Enter to accept all, or override any role using a number or name (e.g. `DEV: 5` or `DEV: my-other-skill`).
->
-> After that, I'll show the exact setup command for your approval."
+> Press Enter to accept all, or override any role using a number or name (e.g. `DEV: 5` or `DEV: my-other-skill`)."
 
-- For models: accept a number or full model ID string; Enter = default model.
-- If the user answers all at once (one line per role), parse their answers.
-- Store as `$MODEL_PM`, `$MODEL_PO`, `$MODEL_DEV`, `$MODEL_QC`.
-- For skills: propose `none` for a role only when no installed skill is a reasonable fit; do NOT leave all roles skill-less if relevant skills are installed.
+- Propose `none` for a role only when no installed skill is a reasonable fit; do NOT leave all roles skill-less if relevant skills are installed.
 - **NEVER assign `agent-orchestration-workflow` to any role** — it is the orchestrator skill itself and will break discovery if injected into a role prompt.
 - Store as `$SKILL_PM`, `$SKILL_PO`, `$SKILL_DEV`, `$SKILL_QC`.
 - If all skills are none, omit `--skill-*` flags from the setup command.
