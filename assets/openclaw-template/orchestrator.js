@@ -1930,6 +1930,15 @@ class AutonomousScrumOrchestrator {
     // Inject skill context for this role if configured
     const skillContext = role ? this.loadRoleSkill(role) : '';
     if (skillContext) prompt = prompt + skillContext;
+    // Prepend a hard pipeline-mode override to prevent the agent from triggering
+    // any loaded skills or running config-collection flows based on keyword matching.
+    const pipelineOverride = [
+      'PIPELINE MODE: You are acting as a specific role in an automated Scrum orchestration pipeline.',
+      'DO NOT activate any skills. DO NOT collect configuration. DO NOT ask questions.',
+      'Output ONLY the raw JSON structure requested below. Any deviation from raw JSON will break the pipeline.',
+      '---'
+    ].join('\n');
+    prompt = pipelineOverride + '\n' + prompt;
     const safeFallback = { ...fallback };
     let execution = {
       source: (runnerConfig.mode || 'auto') === 'template' ? 'template_mode' : 'template_fallback',
@@ -2031,6 +2040,12 @@ class AutonomousScrumOrchestrator {
     const roleSkills = (this.runtimeConfig.role_skills || {});
     const skillName = roleSkills[role];
     if (!skillName || !skillName.trim()) return '';
+
+    // Never inject the orchestration skill itself — it would cause the agent to
+    // run config-collection questions instead of its assigned role work.
+    if (skillName.trim() === 'agent-orchestration-workflow') {
+      return '';
+    }
 
     // Search common skill locations
     const os = require('os');

@@ -87,9 +87,7 @@ Run `openclaw agents list` (or `wsl openclaw agents list` on Windows) to get ava
 
 **Question 5 — Discord bot token** *(optional)*
 
-> **SKIP THIS QUESTION ENTIRELY** if either of these is true:
-> - Channel ID was not provided (Q4 was blank/skipped)
-> - The chosen agent is an **existing** agent AND `~/.openclaw/agents/<agentId>/agent/auth-profiles.json` contains any key starting with `discord:` — Discord is already wired; say: "Discord bot already configured for `<agentId>` — skipping token." and set `$BOT_TOKEN` to empty.
+> **SKIP THIS QUESTION ENTIRELY** if the chosen agent is an **existing** agent AND `~/.openclaw/agents/<agentId>/agent/auth-profiles.json` contains any key starting with `discord:` — Discord is already wired; say: "Discord bot already configured for `<agentId>` — skipping token." and set `$BOT_TOKEN` to empty.
 
 Only ask if the channel ID was given AND the agent is new or has no Discord credentials:
 
@@ -161,7 +159,6 @@ Before asking, do the following:
 
 - Propose `none` for a role only when no installed skill is a reasonable fit.
 - Do NOT leave all roles skill-less if relevant skills are installed — always propose the best match.
-- **NEVER assign `agent-orchestration-workflow` to any role** — it is the orchestrator skill itself and will break discovery if injected into a role prompt.
 - Store as `$SKILL_PM`, `$SKILL_PO`, `$SKILL_DEV`, `$SKILL_QC`.
 - If all are none, omit `--skill-*` flags from the setup command.
 
