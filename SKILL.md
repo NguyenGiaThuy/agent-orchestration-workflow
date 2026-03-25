@@ -85,7 +85,13 @@ Run `openclaw agents list` (or `wsl openclaw agents list` on Windows) to get ava
 
 ---
 
-**Question 5 — Discord bot token** *(optional, only ask if channel ID was provided)*
+**Question 5 — Discord bot token** *(optional)*
+
+> **SKIP THIS QUESTION ENTIRELY** if either of these is true:
+> - Channel ID was not provided (Q4 was blank/skipped)
+> - The chosen agent is an **existing** agent AND `~/.openclaw/agents/<agentId>/agent/auth-profiles.json` contains any key starting with `discord:` — Discord is already wired; say: "Discord bot already configured for `<agentId>` — skipping token." and set `$BOT_TOKEN` to empty.
+
+Only ask if the channel ID was given AND the agent is new or has no Discord credentials:
 
 Show these setup steps inline before asking:
 ```
