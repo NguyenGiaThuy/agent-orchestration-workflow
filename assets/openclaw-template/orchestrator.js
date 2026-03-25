@@ -1236,9 +1236,10 @@ class AutonomousScrumOrchestrator {
       `Feedback message: ${message}`,
       `Project: ${profile.projectName}`,
       `Workflow state: ${state.status}`,
-      `Current open questions: ${(state.open_questions || []).join(' | ') || 'None'}`,
-      `Backlog stories: ${backlog.stories.map(s => s.id + ': ' + s.title).join(' | ')}`
-    ].join('\n');
+      `Current open questions: ${(state.open_questions || []).slice(0, 3).map(q => typeof q === 'string' ? q : (q.question || JSON.stringify(q))).join(' | ') || 'None'}`,
+      `Relevant stories: ${(backlog.stories || []).filter(s => role === 'developer' || role === 'qc' ? (s.status === 'IN_SPRINT' || this.isStoryInReview(s)) : true).slice(0, 6).map(s => s.id + ': ' + s.title).join(' | ') || 'None'}`,
+      this.selectBoundedContext(role, 'feedback', state, backlog)
+    ].filter(Boolean).join('\n');
   }
 
   buildFeedbackFallback(role, type, message, profile, state) {
@@ -1661,7 +1662,7 @@ class AutonomousScrumOrchestrator {
       notes[role] = await this.runAgentTurn({
         role,
         ceremony: 'sprint_planning',
-        prompt: this.buildPlanningPrompt(role, profile, sprintStories, plannedPoints, sprintId, teamCapacityPoints),
+        prompt: this.buildPlanningPrompt(role, profile, state, sprintStories, plannedPoints, sprintId, teamCapacityPoints),
         context: {
           workflow_state: state.status,
           sprint_id: sprintId,
@@ -1789,6 +1790,60 @@ class AutonomousScrumOrchestrator {
     });
   }
 
+  /**
+   * Returns a bounded, role-filtered context snippet for appending to any prompt.
+   *
+   * Caps: 3 recent feedback entries (type-filtered), 3 unresolved questions,
+   * 5 active sprint stories (IN_SPRINT + REVIEW only).
+   * Returns empty string when no relevant context exists.
+   */
+  selectBoundedContext(role, ceremony, state, backlog) {
+    const MAX_FEEDBACK = 3;
+    const MAX_QUESTIONS = 3;
+    const MAX_SPRINT_STORIES = 5;
+    const lines = [];
+
+    // 1. Recent relevant feedback — business for PM/PO, technical for DEV/QC
+    const feedbackTypes = (role === 'developer' || role === 'qc') ? ['technical'] : ['business'];
+    let recentFeedback = [];
+    try {
+      recentFeedback = this.loadFeedbackLog()
+        .filter(e => feedbackTypes.includes(e.type))
+        .slice(-MAX_FEEDBACK);
+    } catch { /* feedback log absent */ }
+
+    if (recentFeedback.length > 0) {
+      lines.push(`Recent ${feedbackTypes[0]} feedback (latest ${recentFeedback.length}):`);
+      recentFeedback.forEach(e => {
+        const short = e.message.length > 100 ? e.message.slice(0, 100) + '...' : e.message;
+        lines.push(`  [${e.timestamp.split('T')[0]}] ${short}`);
+      });
+    }
+
+    // 2. Unresolved questions — top N only, normalized to strings
+    const questions = (state.open_questions || [])
+      .slice(0, MAX_QUESTIONS)
+      .map(q => (typeof q === 'string' ? q : (q.question || JSON.stringify(q))));
+    if (questions.length > 0) {
+      lines.push(`Unresolved questions (top ${questions.length}): ${questions.join(' | ')}`);
+    }
+
+    // 3. Active sprint stories — only for ceremonies that benefit from story-level context
+    const SPRINT_CEREMONIES = new Set(['daily_standup', 'daily_qc_sync', 'sprint_planning', 'feedback']);
+    if (SPRINT_CEREMONIES.has(ceremony) && backlog && Array.isArray(backlog.stories)) {
+      const active = backlog.stories
+        .filter(s => s.status === 'IN_SPRINT' || this.isStoryInReview(s))
+        .slice(0, MAX_SPRINT_STORIES)
+        .map(s => `  ${s.id} [${s.status}]: ${s.title}`);
+      if (active.length > 0) {
+        lines.push(`Active sprint stories (${active.length}):`);
+        active.forEach(l => lines.push(l));
+      }
+    }
+
+    return lines.length > 0 ? '\n' + lines.join('\n') : '';
+  }
+
   buildDiscoveryPrompt(role, profile, state) {
     const focus = {
       po: 'Focus on business framing, scope, assumptions, and unanswered product questions.',
@@ -1797,16 +1852,19 @@ class AutonomousScrumOrchestrator {
       pm: 'Focus on workflow readiness, approval gating, blocker posture, and the next Scrum move.'
     };
 
+    const topQuestions = (state.open_questions || []).slice(0, 3)
+      .map(q => (typeof q === 'string' ? q : (q.question || JSON.stringify(q))));
     return [
       `You are the ${this.agents[role].name} for ${profile.projectName}.`,
       focus[role],
       'Return raw JSON only with keys "summary" and "bullets". Do not wrap the response in code fences.',
       `Idea: ${state.idea || profile.projectName}`,
       `Workflow state: ${state.status}`,
-      `Business goals: ${profile.business_goals.join(' | ')}`,
-      `Core capabilities: ${profile.core_capabilities.join(' | ')}`,
-      `Open questions: ${(state.open_questions || []).join(' | ') || 'None'}`
-    ].join('\n');
+      `Business goals: ${profile.business_goals.slice(0, 3).join(' | ')}`,
+      `Core capabilities: ${profile.core_capabilities.slice(0, 4).join(' | ')}`,
+      `Open questions: ${topQuestions.join(' | ') || 'None'}`,
+      this.selectBoundedContext(role, 'discovery_sync', state, null)
+    ].filter(Boolean).join('\n');
   }
 
   buildStandupPrompt(role, state, profile, backlog) {
@@ -1819,44 +1877,51 @@ class AutonomousScrumOrchestrator {
       'Keep the update short and action-oriented.',
       `Workflow state: ${state.status}`,
       `Approval status: ${state.approval.status}`,
-      `Sprint progress: ${doneCount} stories DONE, ${reviewCount} in REVIEW, ${inSprintCount} IN_SPRINT`,
-      `Open questions: ${(state.open_questions || []).join(' | ') || 'None'}`
-    ].join('\n');
+      `Sprint progress: ${doneCount} DONE, ${reviewCount} REVIEW, ${inSprintCount} IN_SPRINT`,
+      this.selectBoundedContext(role, 'daily_standup', state, backlog)
+    ].filter(Boolean).join('\n');
   }
 
-  buildPlanningPrompt(role, profile, sprintStories, plannedPoints, sprintId, teamCapacityPoints) {
+  buildPlanningPrompt(role, profile, state, sprintStories, plannedPoints, sprintId, teamCapacityPoints) {
+    const storyLines = sprintStories.slice(0, 8)
+      .map(s => `${s.id} (${s.story_points}pt): ${s.title}`);
     return [
       `You are the ${this.agents[role].name} for ${profile.projectName}.`,
       'Return raw JSON only with keys "summary" and "bullets". Do not wrap the response in code fences.',
       `Ceremony: sprint planning for ${sprintId}`,
-      `Planned story points: ${plannedPoints}`,
-      `Team capacity story points: ${teamCapacityPoints}`,
-      `Stories in scope: ${sprintStories.map(story => story.id).join(', ') || 'None'}`,
-      'Focus on what your role must confirm before the sprint starts.'
-    ].join('\n');
+      `Planned story points: ${plannedPoints} / capacity ${teamCapacityPoints}`,
+      `Stories in scope (${sprintStories.length}): ${storyLines.join(' | ') || 'None'}`,
+      'Focus on what your role must confirm before the sprint starts.',
+      this.selectBoundedContext(role, 'sprint_planning', state, { stories: sprintStories })
+    ].filter(Boolean).join('\n');
   }
 
   buildQcSyncPrompt(role, state, inSprint) {
+    const storyLines = inSprint.slice(0, 8)
+      .map(s => `${s.id} [${s.status}]: ${s.title}`);
     return [
       `You are the ${this.agents[role].name} in the daily QC sync.`,
       'Return raw JSON only with keys "summary" and "bullets". Do not wrap the response in code fences.',
       `Workflow state: ${state.status}`,
-      `Sprint id: ${state.current_sprint_id || 'Not started'}`,
-      `Stories being tracked: ${inSprint.map(story => story.id).join(', ') || 'None'}`,
-      'Focus on release risk, scenario readiness, and the most important next move.'
-    ].join('\n');
+      `Sprint: ${state.current_sprint_id || 'Not started'}`,
+      `Stories tracked (${inSprint.length}): ${storyLines.join(' | ') || 'None'}`,
+      'Focus on release risk, scenario readiness, and the most important next move.',
+      this.selectBoundedContext(role, 'daily_qc_sync', state, { stories: inSprint })
+    ].filter(Boolean).join('\n');
   }
 
   buildDailyDigestPrompt(state, backlog, blockers) {
+    const topBlockers = blockers.slice(0, 2).map(b => (typeof b === 'string' ? b : (b.description || JSON.stringify(b))));
     return [
       `You are the ${this.agents.pm.name} publishing the daily digest for ${state.project_name || this.titleizeProjectId(this.projectId)}.`,
       'Return raw JSON only with keys "summary" and "bullets". Do not wrap the response in code fences.',
       `Workflow state: ${state.status}`,
       `Approval status: ${state.approval.status}`,
       `Stories tracked: ${backlog.stories.length}`,
-      `Open blockers: ${blockers.length}`,
-      'Keep the message concise enough for a Discord channel summary.'
-    ].join('\n');
+      topBlockers.length > 0 ? `Active blockers: ${topBlockers.join(' | ')}` : 'Active blockers: none',
+      'Keep the message concise enough for a Discord channel summary.',
+      this.selectBoundedContext('pm', 'daily_activity_digest', state, backlog)
+    ].filter(Boolean).join('\n');
   }
 
   async runAgentTurn({ role, ceremony, prompt, context, fallback, normalize }) {
