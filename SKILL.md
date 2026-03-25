@@ -54,13 +54,13 @@ Ask each question below in order. Wait for the user's answer before moving to th
 
 **Question 3 — OpenClaw agent** *(required, default: `main`)*
 
-Run `openclaw agents list` (or `wsl openclaw agents list` on Windows) to get available agents, then present a **numbered list** including a "Create new" option and ask:
+Run `openclaw agents list` (or `wsl openclaw agents list` on Windows) to get available agents. Parse the output: each `- <id>` line is an agent ID; the one tagged `(default)` is the default (fall back to `main` if none is tagged). **Never hardcode agent names** — always use the live output. Present a **numbered list** including a "Create new" option and ask:
 
 > "Which OpenClaw agent should run this project?
 > ```
->  1. main  ← default
->  2. frieren
->  ... [all returned agents]
+>  1. <first agent id>  ← default
+>  2. <second agent id>
+>  ... [all agents from `openclaw agents list`]
 >  N. Create a new agent
 > ```
 > Pick a number, or type a new agent ID to create one."
@@ -104,18 +104,14 @@ To get a bot token:
 
 **Question 6 — Models per role** *(optional)*
 
-Before asking, read `~/.openclaw/openclaw.json` and extract:
-- **Available models**: keys of `.agents.defaults.models` (these are `github-copilot/<id>` strings)
-- **Default model**: value of `.agents.defaults.model`
-
-If the file cannot be read, fall back to default `github-copilot/gpt-5.4-mini`.
+Before asking, run `openclaw models list` (or `wsl openclaw models list` on Windows). Parse the tabular output: the first column of each data row is the model ID; the row tagged `default` is the default model. **Never hardcode model names** — always use the live output. If the command fails, fall back to asking the user to type a model ID freely.
 
 Then ask in a single message block, listing the available models:
 
 > "Which AI model should each role use? Available models:
-> 1. github-copilot/gpt-5.4-mini *(default)*
-> 2. github-copilot/claude-sonnet-4.6
-> 3. ... [full list from .openclaw.json]
+> 1. <first model id>  *(default)*
+> 2. <second model id>
+> ... [full list from `openclaw models list`]
 >
 > Press Enter to use the default for any role.
 > - PM  (Project Manager): ___
@@ -124,7 +120,7 @@ Then ask in a single message block, listing the available models:
 > - QC  (Quality Control): ___"
 
 - Accept a number from the list or a full model ID string.
-- If the user presses Enter for a role, use the default model read from `.agents.defaults.model`.
+- If the user presses Enter for a role, use the default model from `openclaw models list`.
 - If the user answers all at once (one line per role), parse their answers.
 - Store as `$MODEL_PM`, `$MODEL_PO`, `$MODEL_DEV`, `$MODEL_QC`.
 
