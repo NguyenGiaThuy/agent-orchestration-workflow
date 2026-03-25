@@ -15,9 +15,12 @@ const YAML = require('yaml');
 
 const SKILL_DIR = path.resolve(__dirname, '..');
 const TEMPLATE_DIR = path.join(SKILL_DIR, 'assets', 'openclaw-template');
-// --project-dir <path> allows running setup for a project in any directory
+// --project-dir <path>  workspace root; --project-id <id> creates the project subfolder inside it
 const _pdIdx = process.argv.indexOf('--project-dir');
-const REPO_ROOT = _pdIdx !== -1 ? path.resolve(process.argv[_pdIdx + 1]) : process.cwd();
+const _piIdx = process.argv.indexOf('--project-id');
+const _baseDir = _pdIdx !== -1 ? path.resolve(process.argv[_pdIdx + 1]) : process.cwd();
+const _earlyProjectId = _piIdx !== -1 ? process.argv[_piIdx + 1] : null;
+const REPO_ROOT = _earlyProjectId ? path.join(_baseDir, _earlyProjectId) : _baseDir;
 const OPENCLAW_DIR = path.join(REPO_ROOT, '.openclaw');
 const RUNTIME_CFG = path.join(OPENCLAW_DIR, 'runtime-config.yml');
 const DISCORD_CFG = path.join(OPENCLAW_DIR, 'discord-config.yml');
@@ -532,7 +535,7 @@ async function main() {
   Discord:  ${channelId || '(not set)'}
   Bot:      ${botStatus}
   Project:  ${projectId}
-  Docs:     ./${projectId}/docs/
+  Docs:     ./docs/
   Scheduler:${schedulerMode === 'direct-worker' ? ' direct-worker (run node .openclaw/direct-scheduler.js tick)' : ' openclaw-cron'}
 
   Review docs then approve:

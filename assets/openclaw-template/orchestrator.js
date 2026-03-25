@@ -112,7 +112,8 @@ class AutonomousScrumOrchestrator {
 
   setProjectContext(projectId) {
     this.projectId = projectId || '';
-    this.projectDir = this.projectId ? path.join(this.workspaceRoot, this.projectId) : null;
+    // workspaceRoot IS the project directory (.openclaw lives inside it)
+    this.projectDir = this.projectId ? this.workspaceRoot : null;
     this.docsDir = this.projectDir
       ? path.join(this.projectDir, this.getConfigValue(this.runtimeConfig, ['storage', 'docs_dir']) || 'docs')
       : null;

@@ -34,12 +34,12 @@ Ask each question below in order. Wait for the user's answer before moving to th
 
 ---
 
-**Question 1 — Project directory** *(required)*
+**Question 1 — Project workspace directory** *(required)*
 
-> "Which folder should I set this project up in? Please give me the absolute path to the target directory (e.g. `/home/you/projects/my-app`)."
+> "Which parent folder should I create the project in? Give me the absolute path to the workspace directory (e.g. `/home/you/projects`). The project will be set up at `<path>/<project-id>/`."
 
 - No default. The user must provide a path.
-- Store as `$PROJECT_DIR`.
+- Store as `$PROJECT_DIR`. The actual project root will be `$PROJECT_DIR/$PROJECT_ID`.
 
 ---
 
@@ -239,7 +239,7 @@ After the command completes, follow the **After Setup Completes** section below.
 ╚══════════════════════════════════════════════════════╝
 ```
 
-Then read `$PROJECT_DIR/$PROJECT_ID/workflow-state.json` and extract the `open_questions` array.
+Then read `$PROJECT_DIR/$PROJECT_ID/docs/workflow-state.json` and extract the `open_questions` array.
 
 ### Conversational Q&A (do NOT show raw node commands to the user)
 
@@ -255,14 +255,14 @@ List questions numbered:
 
 For each answer the user provides, silently run in the background:
 ```bash
-node "$PROJECT_DIR/.openclaw/orchestrator.js" feedback "$PROJECT_ID" --type business --message "<answer>"
+node "$PROJECT_DIR/$PROJECT_ID/.openclaw/orchestrator.js" feedback "$PROJECT_ID" --type business --message "<answer>"
 ```
 Then acknowledge: "Got it — I've passed that to the team."
 
 After all questions are answered (or user says "skip" / "no more"), ask:
 > "All done! Ready to approve and kick off implementation? (yes / not yet)"
 
-- **yes** → silently run `node "$PROJECT_DIR/.openclaw/orchestrator.js" approve "$PROJECT_ID"` and say: "Implementation is starting! The team is now in sprint planning."
+- **yes** → silently run `node "$PROJECT_DIR/$PROJECT_ID/.openclaw/orchestrator.js" approve "$PROJECT_ID"` and say: "Implementation is starting! The team is now in sprint planning."
 - **not yet** → say: "No problem. The docs are in `$PROJECT_DIR/$PROJECT_ID/docs/`. When you're ready, just tell me 'approve the project' and I'll kick it off."
 
 ### If there are no open questions
@@ -276,7 +276,7 @@ Autonomous Scrum team orchestrator. Drops a `.openclaw/` folder into any repo an
 
 ## Quick Setup
 
-> **IMPORTANT**: Always pass `--project-dir` pointing to the target project folder. Never run setup from cwd — it will scaffold `.openclaw/` in the wrong place.
+> **IMPORTANT**: Always pass `--project-dir` pointing to the **workspace/parent** directory and `--project-id` for the project slug. The script creates `$PROJECT_DIR/$PROJECT_ID/` and places `.openclaw/` inside it.
 
 ```bash
 node ~/.agents/skills/agent-orchestration-workflow/scripts/setup.js --project-dir /path/to/project
