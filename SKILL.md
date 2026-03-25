@@ -72,39 +72,19 @@ Run `openclaw agents list` (or `wsl openclaw agents list` on Windows) to get ava
 
 ---
 
-> **Discord pre-check** — If the user chose an **existing** agent, read `~/.openclaw/agents/<agentId>/agent/auth-profiles.json`. If any key starting with `discord:` exists in the `profiles` object, Discord is already wired — **skip Q5 only** (bot token) and say: "Discord bot is already configured for agent `<agentId>` — skipping token setup. I still need the channel ID for posting."
+**Question 4 — Discord webhook URL** *(optional)*
 
----
-
-**Question 4 — Discord channel ID** *(optional)*
-
-> "What is your Discord channel ID for ceremony reports? Right-click the channel → Copy Channel ID. Press Enter to skip Discord."
-
-- If skipped, omit `--channel` from the setup command.
-- Store as `$CHANNEL_ID` (empty = skipped).
-
----
-
-**Question 5 — Discord bot token** *(optional)*
-
-> **SKIP THIS QUESTION ENTIRELY** if either of these is true:
-> - Channel ID was not provided (Q4 was blank/skipped)
-> - The chosen agent is an **existing** agent AND `~/.openclaw/agents/<agentId>/agent/auth-profiles.json` contains any key starting with `discord:` — Discord is already wired; say: "Discord bot already configured for `<agentId>` — skipping token." and set `$BOT_TOKEN` to empty.
-
-Only ask if the channel ID was given AND the agent is new or has no Discord credentials:
-
-Show these setup steps inline before asking:
+Show these instructions inline before asking:
 ```
-To get a bot token:
-1. discord.com/developers/applications → your app → Bot
-2. Enable Message Content Intent + Server Members Intent → Save
-3. Reset Token → copy it
-4. Invite URL: discord.com/api/oauth2/authorize?client_id=APP_ID&permissions=68608&scope=bot
+To get a webhook URL:
+1. Open Discord → right-click your channel → Edit Channel
+2. Integrations → Webhooks → New Webhook
+3. Give it a name (e.g. "OpenClaw PM") → Copy Webhook URL
 ```
-> "Paste your Discord bot token, or press Enter to skip."
+> "Paste your Discord webhook URL, or press Enter to skip Discord."
 
-- If skipped, omit `--bot-token` from the setup command.
-- Store as `$BOT_TOKEN` (empty = skipped).
+- If skipped, omit `--webhook-url` from the setup command.
+- Store as `$WEBHOOK_URL` (empty = skipped).
 
 ---
 
@@ -210,8 +190,7 @@ node ~/.agents/skills/agent-orchestration-workflow/scripts/setup.js \
   --idea "$IDEA" \
   --project-id "$PROJECT_ID" \
   --agent "$AGENT" \
-  [--channel "$CHANNEL_ID"] \
-  [--bot-token "***"] \              ← actual token passed securely at runtime
+  [--webhook-url "$WEBHOOK_URL"] \
   [--model-pm "$MODEL_PM"] \         ← AI model ID e.g. github-copilot/gpt-5-mini
   [--model-po "$MODEL_PO"] \         ← AI model ID
   [--model-developer "$MODEL_DEV"] \ ← AI model ID
@@ -226,7 +205,6 @@ Ready to run? (yes / edit)
 ```
 
 - Omit any flag whose value was skipped or left empty.
-- The `--bot-token` flag uses the real token at runtime even though it is masked in the display above.
 - **MANDATORY: do NOT run the command until the user explicitly replies "yes".** "lgtm", "ok", "go on", "sounds good", "sure", silence, or any answer that is not literally the word "yes" is NOT confirmation — show the command again and ask.
 - If the user says **"edit"** or corrects any value, update the displayed command and ask again before running.
 - When the user confirms with "yes", run the command via terminal from the workspace root.

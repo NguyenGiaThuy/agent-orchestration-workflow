@@ -1068,18 +1068,44 @@ class AutonomousScrumOrchestrator {
 
     const executionWarningBullets = this.buildExecutionWarningBullets(agentResponses, 1);
 
+    const primaryResponse = normalizedType === 'business'
+      ? (agentResponses.po || {})
+      : (agentResponses.developer || {});
+    const primaryLabel = normalizedType === 'business' ? 'PO' : 'DEV';
+    const primarySummary = typeof primaryResponse.summary === 'string' ? primaryResponse.summary.trim() : '';
+
+    const newQuestions = [
+      ...((agentResponses.po || {}).open_questions || []),
+      ...((agentResponses.pm || {}).open_questions || []),
+      ...((agentResponses.developer || {}).open_questions || []),
+      ...((agentResponses.qc || {}).open_questions || [])
+    ].filter(q => typeof q === 'string' && q.trim());
+
+    const scopeChanges = normalizedType === 'business'
+      ? ((agentResponses.po || {}).scope_changes || []).filter(Boolean)
+      : [];
+
+    const nextActions = this.buildNextActions(state, backlog).slice(0, 2).map(n => `→ ${n}`);
+
+    const notificationBullets = [
+      `Type: ${normalizedType}`,
+      `Message: ${normalizedMessage.slice(0, 120)}${normalizedMessage.length > 120 ? '...' : ''}`,
+      ...(primarySummary ? [`${primaryLabel}: ${primarySummary.slice(0, 100)}${primarySummary.length > 100 ? '...' : ''}`] : []),
+      ...scopeChanges.slice(0, 2).map(s => `Scope: ${String(s).slice(0, 80)}`),
+      ...newQuestions.slice(0, 2).map(q => `New Q: ${q.slice(0, 80)}${q.length > 80 ? '...' : ''}`),
+      `Approval: ${state.approval.status}`,
+      ...executionWarningBullets,
+      ...nextActions
+    ];
+
     await this.sendDiscordNotification('ceremony_update', {
       title: `${profile.projectName}: ${normalizedType} feedback received`,
-      summary: normalizedType === 'business'
-        ? 'Business feedback was applied. Discovery artifacts updated; approval requires re-review.'
-        : 'Technical feedback was applied. Technical design and QC strategy updated.',
-      bullets: [
-        `Type: ${normalizedType}`,
-        `Message: ${normalizedMessage.slice(0, 120)}${normalizedMessage.length > 120 ? '...' : ''}`,
-        `Approval status: ${state.approval.status}`,
-        ...executionWarningBullets,
-        `Next: ${this.buildNextActions(state, backlog)[0]}`
-      ]
+      summary: primarySummary
+        ? primarySummary.slice(0, 150) + (primarySummary.length > 150 ? '...' : '')
+        : (normalizedType === 'business'
+          ? 'Business feedback applied. Discovery artifacts updated; approval requires re-review.'
+          : 'Technical feedback applied. Technical design and QC strategy updated.'),
+      bullets: notificationBullets
     });
 
     return result;

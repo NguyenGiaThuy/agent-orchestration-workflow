@@ -271,109 +271,45 @@ async function main() {
   if (isNewAgent) { const c = createAgent(chosenAgentId); if (!c) warn(`Could not create agent. Continuing with config only.`); }
   else ok(`Using existing agent: ${chosenAgentId}`);
 
-  // Step 3: Discord bot
-  step('Discord bot setup');
-  let channelId = getArg('--channel');
-  let botToken = getArg('--bot-token');
-  let skipBot = false;
+  // Step 3: Discord webhook
+  step('Discord webhook setup');
+  let webhookUrl = getArg('--webhook-url');
 
-  if (!NON_INTERACTIVE) {
-    if (isNewAgent) {
-      console.log('  ┌─ Before you paste a bot token ──────────────────────────────────┐');
-      console.log('  │                                                                 │');
-      console.log('  │  Discord WILL reject your token without these steps first:     │');
-      console.log('  │                                                                 │');
-      console.log('  │  1. discord.com/developers/applications                        │');
-      console.log('  │  2. Select your app (or New Application) → Bot                 │');
-      console.log('  │  3. Privileged Gateway Intents → enable both:                  │');
-      console.log('  │       ✅ Message Content Intent                                 │');
-      console.log('  │       ✅ Server Members Intent                                  │');
-      console.log('  │  4. Save Changes                                               │');
-      console.log('  │  5. Bot → Reset Token → copy it                                │');
-      console.log('  │  6. Invite bot (replace APP_ID):                               │');
-      console.log('  │     discord.com/api/oauth2/authorize                           │');
-      console.log('  │       ?client_id=APP_ID&permissions=68608&scope=bot            │');
-      console.log('  │                                                                 │');
-      console.log('  └─────────────────────────────────────────────────────────────────┘\n');
-      botToken = botToken || await ask(rl, '  Bot token (leave blank to skip)');
-    } else {
-      const existingAccount = getAgentDiscordAccount(chosenAgentId);
-      if (existingAccount) {
-        skipBot = true;
-        ok(`Discord already wired for agent '${chosenAgentId}' (account: ${existingAccount}) — skipping token setup`);
-      } else {
-        const addBot = await ask(rl, `  Add a Discord bot token for '${chosenAgentId}'? (y/N)`, 'N');
-        if (addBot.toLowerCase() === 'y') botToken = await ask(rl, '  Bot token (leave blank to skip)');
-        else skipBot = true;
-      }
-    }
-    if (!channelId) {
-      console.log('\n  Discord Channel ID — right-click channel → Copy Channel ID\n');
-      channelId = await ask(rl, '  Channel ID');
-    }
-  }
-
-  let botWired = false;
-  if (botToken && botToken.trim()) botWired = wireAgentToChannel(chosenAgentId, botToken.trim());
-  else if (!skipBot && !NON_INTERACTIVE) {
-    warn('No bot token — skipping Discord registration.');
-    info(`Run later: openclaw channels add --channel discord --token <token> --account discord-${chosenAgentId}`);
-    info(`Then:      openclaw agents bind --agent ${chosenAgentId} --bind discord:discord-${chosenAgentId}`);
+  if (!NON_INTERACTIVE && !webhookUrl) {
+    console.log('  ┌─ To get a webhook URL ──────────────────────────────────────────┐');
+    console.log('  │                                                                 │');
+    console.log('  │  1. Open Discord → right-click your channel → Edit Channel     │');
+    console.log('  │  2. Integrations → Webhooks → New Webhook                      │');
+    console.log('  │  3. Give it a name (e.g. "OpenClaw PM") → Copy Webhook URL     │');
+    console.log('  │                                                                 │');
+    console.log('  └─────────────────────────────────────────────────────────────────┘\n');
+    webhookUrl = await ask(rl, '  Webhook URL (leave blank to skip Discord)');
   }
 
   // Step 4: discord-config.yml
   step('Configuring Discord delivery');
-  if (channelId && channelId.trim()) {
+  {
     let dc = fs.readFileSync(DISCORD_CFG, 'utf8');
-    dc = dc.replace(/(^\s*enabled:\s*).*/m, '$1true');
-    dc = dc.replace(/(^\s*transport:\s*).*/m, '$1"channel"');
-    if (/channel_id:/.test(dc)) dc = dc.replace(/(^\s*channel_id:\s*).*/m, `$1"${channelId.trim()}"`);
-    else dc = dc.replace(/(^\s*transport:\s*"channel")/m, `$1\n  channel_id: "${channelId.trim()}"`);
-    dc = dc.replace(/^\s*webhook_env:.*\n/m, '').replace(/^\s*webhook_url:.*\n/m, '');
-    fs.writeFileSync(DISCORD_CFG, dc);
-    ok(`Discord channel set → ${channelId.trim()}`);
-  } else warn('No channel ID — Discord disabled. Set channel_id in .openclaw/discord-config.yml later.');
+    if (webhookUrl && webhookUrl.trim()) {
+      dc = dc.replace(/(^\s*enabled:\s*).*/m, '$1true');
+      dc = dc.replace(/(^\s*transport:\s*).*/m, '$1"webhook"');
+      dc = dc.replace(/(^\s*webhook_url:\s*).*/m, `$1"${webhookUrl.trim()}"`);
+      dc = dc.replace(/(^\s*webhook_env:\s*).*/m, '$1""');
+      dc = dc.replace(/(^\s*channel_id:\s*).*/m, '$1""');
+      dc = dc.replace(/(^\s*account:\s*).*/m, '$1""');
+      fs.writeFileSync(DISCORD_CFG, dc);
+      ok('Discord webhook configured');
+    } else {
+      dc = dc.replace(/(^\s*enabled:\s*).*/m, '$1false');
+      fs.writeFileSync(DISCORD_CFG, dc);
+      warn('No webhook URL — Discord disabled. Set webhook_url in .openclaw/discord-config.yml later.');
+    }
+  }
 
   // Step 5: runtime-config.yml
   patchYamlLine(RUNTIME_CFG, 'agent', `"${chosenAgentId}"`);
   patchYamlLine(RUNTIME_CFG, 'cron_agent', `"${chosenAgentId}"`);
   ok(`runtime-config.yml → agent: ${chosenAgentId}`);
-
-  // Step 4b: Discord account selection
-  // First try to auto-detect from the chosen agent's auth-profiles
-  let discordAccount = getArg('--discord-account') || getAgentDiscordAccount(chosenAgentId) || '';
-  if (!NON_INTERACTIVE && !discordAccount) {
-    // Fall back: collect discord accounts from ALL agents
-    const allDiscordAccounts = new Set();
-    try {
-      const agentDirs = fs.readdirSync(OPENCLAW_AGENTS);
-      for (const dir of agentDirs) {
-        try {
-          const ap = JSON.parse(fs.readFileSync(path.join(OPENCLAW_AGENTS, dir, 'agent', 'auth-profiles.json'), 'utf8'));
-          Object.keys(ap.profiles || {}).filter(k => k.startsWith('discord:')).forEach(k => allDiscordAccounts.add(k.replace('discord:', '')));
-        } catch { /* skip */ }
-      }
-    } catch { /* skip */ }
-    const discordAccountsList = [...allDiscordAccounts];
-    if (discordAccountsList.length > 0) {
-      console.log('  Available Discord accounts:');
-      discordAccountsList.forEach((a, i) => console.log(`    ${i + 1}. ${a}`));
-      const picked = await ask(rl, `  Discord account to use for posting`, discordAccountsList[0]);
-      const num = parseInt(picked, 10);
-      discordAccount = (!isNaN(num) && num >= 1 && num <= discordAccountsList.length)
-        ? discordAccountsList[num - 1] : picked.trim() || discordAccountsList[0];
-      ok(`Discord account → ${discordAccount}`);
-    } else {
-      discordAccount = await ask(rl, '  Discord account name to use for posting', '');
-      ok(`Discord account → ${discordAccount}`);
-    }
-  } else if (discordAccount) {
-    ok(`Discord account → ${discordAccount} (auto-detected)`);
-  }
-  // Write account to discord-config.yml
-  let dcContent = fs.readFileSync(DISCORD_CFG, 'utf8');
-  dcContent = dcContent.replace(/^(\s*account:\s*).*$/m, `$1"${discordAccount}"`);
-  fs.writeFileSync(DISCORD_CFG, dcContent);
 
   // Step 5a: Role skills
   step('Role skill assignment (optional)');
@@ -538,9 +474,9 @@ async function main() {
     run('node .openclaw/register-openclaw-cron.js', REPO_ROOT);
   }
 
-  const botStatus = botWired ? `✔ Bot wired (account: discord-${chosenAgentId})`
-    : skipBot ? `✔ Using existing account`
-      : `⚠  Bot token not provided — wire manually`;
+  const discordStatus = webhookUrl && webhookUrl.trim()
+    ? `✔ Webhook configured`
+    : `⚠  Discord disabled (no webhook URL)`;
 
   console.log(`
 ╔══════════════════════════════════════════════════════╗
@@ -548,8 +484,7 @@ async function main() {
 ╚══════════════════════════════════════════════════════╝
 
   Agent:    ${chosenAgentId} (${isNewAgent ? 'newly created' : 'existing'})
-  Discord:  ${channelId || '(not set)'}
-  Bot:      ${botStatus}
+  Discord:  ${discordStatus}
   Project:  ${projectId}
   Docs:     ./docs/
   Scheduler:${schedulerMode === 'direct-worker' ? ' direct-worker (run node .openclaw/direct-scheduler.js tick)' : ' openclaw-cron'}

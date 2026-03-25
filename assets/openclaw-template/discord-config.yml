@@ -1,10 +1,10 @@
 # Discord delivery settings.
-# transport: "channel" uses OpenClaw agent to post via bot (recommended)
-# transport: "webhook" uses a raw Discord webhook URL instead
+# transport: "webhook" posts directly via Discord webhook URL (recommended — no agent session or memory pollution)
+# transport: "channel" uses OpenClaw agent bot instead (requires bot token setup)
 
 discord:
   enabled: true
-  transport: "channel"
+  transport: "webhook"
   account: "" # filled in by setup.js based on chosen agent
   channel_id: "" # filled in by setup.js
   webhook_env: "" # only needed for webhook transport
