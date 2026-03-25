@@ -32,6 +32,10 @@ openclaw:
   save_transcripts: true
   transcript_dir: "agent-turns"
 
+scheduler:
+  mode: "openclaw-cron"      # "openclaw-cron" | "direct-worker"
+  job_prefix: "agent-orchestration-workflow:"
+
 failure_alerts:
   enabled: true
   mode: "webhook"            # "webhook" | "announce"
@@ -48,6 +52,16 @@ validation:
 ```
 
 When validation is enabled, implementation moves stories into `REVIEW` first, runs the validation command, and only marks stories `DONE` when validation passes and acceptance succeeds. Without validation, stories remain in `REVIEW` until they are manually confirmed.
+
+## Scheduler Mode
+
+Scheduler registration is now isolated behind a backend interface.
+
+- `scheduler.mode: openclaw-cron` uses the existing OpenClaw cron registration path through `register-openclaw-cron.js` and `unregister-openclaw-cron.js`.
+- `scheduler.mode: direct-worker` is reserved for the future direct scheduler/worker backend and is not implemented yet in this phase.
+- `scheduler.job_prefix` controls the scheduler job naming prefix so cleanup and re-registration use the same namespace consistently.
+
+In the current implementation, `openclaw.cron_agent` only applies when `scheduler.mode` is `openclaw-cron`.
 
 ## Execution Health
 
@@ -142,6 +156,8 @@ Both are set automatically by `setup.js`. To change them later, edit the YAML an
 ```bash
 node .openclaw/register-openclaw-cron.js
 ```
+
+That command currently manages only the `openclaw-cron` scheduler backend.
 
 ## Discord Bot — Manual Wiring
 

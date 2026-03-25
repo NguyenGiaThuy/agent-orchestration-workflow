@@ -29,6 +29,10 @@ openclaw:
   save_transcripts: true
   transcript_dir: "agent-turns"
 
+scheduler:
+  mode: "openclaw-cron"
+  job_prefix: "agent-orchestration-workflow:"
+
 failure_alerts:
   enabled: true
   # "webhook" sends to the Discord webhook URL from discord-config.yml.
