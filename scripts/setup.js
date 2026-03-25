@@ -462,6 +462,32 @@ async function main() {
   fs.writeFileSync(RUNTIME_CFG, rc);
   ok('role_models written to runtime-config.yml');
 
+  // Step 5c: Scheduler mode
+  step('Scheduler mode');
+  info('openclaw-cron (default) registers ceremonies with OpenClaw cron.');
+  info('direct-worker (experimental) runs ceremonies directly via file-backed scheduler.\n');
+  const SCHEDULER_MODES = ['openclaw-cron', 'direct-worker'];
+  let chosenSchedulerMode = getArg('--scheduler-mode') || 'openclaw-cron';
+  if (!NON_INTERACTIVE) {
+    console.log('  1. openclaw-cron  ← default');
+    console.log('  2. direct-worker  (experimental)\n');
+    const picked = await ask(rl, '  Scheduler mode (1 or 2)', '1');
+    const num = parseInt(picked, 10);
+    if (num === 2) chosenSchedulerMode = 'direct-worker';
+    else if (num !== 1 && SCHEDULER_MODES.includes(picked.trim())) chosenSchedulerMode = picked.trim();
+  }
+  ok(`Scheduler mode → ${chosenSchedulerMode}`);
+  // Patch scheduler.mode in runtime-config.yml (targets only the scheduler block)
+  {
+    let rcRaw = fs.readFileSync(RUNTIME_CFG, 'utf8');
+    const blockStart = rcRaw.indexOf('\nscheduler:');
+    if (blockStart !== -1) {
+      const before = rcRaw.slice(0, blockStart + 1);
+      const after = rcRaw.slice(blockStart + 1).replace(/^(\s+mode:\s*)"[^"]*"/m, `$1"${chosenSchedulerMode}"`);
+      fs.writeFileSync(RUNTIME_CFG, before + after);
+    }
+  }
+
   // Step 6: Project
   step('Project setup');
   let idea = getArg('--idea');

@@ -305,6 +305,7 @@ node ~/.agents/skills/agent-orchestration-workflow/scripts/setup.js \
 | Stage | State | Description |
 |-------|-------|-------------|
 | Discovery | `DISCOVERY_IN_PROGRESS` | PM + PO + DEV + QC build the project profile |
+| Blocked | `AWAITING_USER_INPUT` | Workflow paused on unresolved open questions |
 | Review | `READY_FOR_APPROVAL` | Human reviews docs, answers open questions |
 | Approved | `APPROVED_FOR_IMPLEMENTATION` | Sprint planning + implementation begins |
 | Sprint | `IN_SPRINT` | DEV implements, QC validates |
@@ -333,7 +334,7 @@ All commands run via `node .openclaw/orchestrator.js <command> <project-id>`:
 
 See `references/config-guide.md` for full field documentation.
 
-- `.openclaw/runtime-config.yml` — agent, model, project settings
+- `.openclaw/runtime-config.yml` — agent, model, project settings; also controls `scheduler`, `validation`, `failure_alerts`, and `role_skills`
 - `.openclaw/discord-config.yml` — channel ID, transport mode
 - `.openclaw/ceremonies.yml` — cron schedule for ceremonies
 
@@ -365,3 +366,58 @@ role_models:
   developer: "github-copilot/gpt-5.1-codex"
   qc:        "github-copilot/gpt-5-mini"
 ```
+
+## Per-Role Skill Config
+
+Set in `.openclaw/runtime-config.yml`:
+```yaml
+role_skills:
+  pm:        ""
+  po:        ""
+  developer: "full-stack-developer"
+  qc:        "javascript-testing-patterns"
+```
+
+Each role loads the named skill from `~/.agents/skills/<name>/SKILL.md` and injects it into its prompts. Assign `""` to skip.
+
+## Scheduler Modes
+
+Set `scheduler.mode` in `.openclaw/runtime-config.yml`:
+
+| Mode | Description |
+|------|-------------|
+| `openclaw-cron` *(default)* | Registers ceremonies with OpenClaw's cron scheduler |
+| `direct-worker` *(experimental)* | File-backed scheduler that runs orchestrator commands directly |
+
+**Direct worker commands:**
+
+| Command | Description |
+|---------|-------------|
+| `node .openclaw/direct-scheduler.js sync` | Sync job registry from `ceremonies.yml` |
+| `node .openclaw/direct-scheduler.js list` | Inspect current job state |
+| `node .openclaw/direct-scheduler.js tick` | Run due ceremonies (cron evaluation) |
+| `node .openclaw/direct-scheduler.js tick --dry-run` | Preview what would run without executing |
+| `node .openclaw/direct-scheduler.js run --ceremony <cmd>` | Force-run a single ceremony |
+
+Switch modes by setting `scheduler.mode: "direct-worker"` in runtime config and running `sync`. Override per-command with `--scheduler-mode <mode>` on `register-openclaw-cron.js` / `unregister-openclaw-cron.js`.
+
+## Story Validation
+
+When `validation.enabled: true` in `.openclaw/runtime-config.yml`, the orchestrator runs the configured command after writing implementation files. Stories move to `REVIEW` state immediately after writes and only advance to `DONE` when validation passes.
+
+```yaml
+validation:
+  enabled: true
+  command: "npm"
+  args: ["test", "--", "--runInBand"]
+  cwd: "."           # relative to project directory
+  timeout_ms: 120000
+```
+
+Validation is optional — `enabled: false` keeps the legacy behavior where stories advance directly to `DONE` after file writes.
+
+## Degraded Execution Reporting
+
+When an OpenClaw agent call fails, the orchestrator falls back to template-based or partial-parse responses. Each turn records its execution source (`openclaw`, `template-fallback`, or `partial-parse-fallback`) in `workflow-state.json` under `execution_health`.
+
+A concise Discord warning is sent on the first degraded turn of any ceremony. The full health log is written to `<project-id>/docs/execution-health.md`. Set `openclaw.fallback_to_templates: false` to disable fallback and fail hard instead.
