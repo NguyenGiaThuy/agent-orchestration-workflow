@@ -260,7 +260,7 @@ async function main() {
     webhookUrl = await ask(rl, '  Webhook URL (leave blank to skip Discord)');
   }
 
-  // Step 4: discord-config.yml
+  // Step 3: discord-config.yml
   step('Configuring Discord delivery');
   {
     let dc = fs.readFileSync(DISCORD_CFG, 'utf8');
@@ -280,7 +280,7 @@ async function main() {
     }
   }
 
-  // Step 5a: Role skills
+  // Step 4a: Role skills
   step('Role skill assignment (optional)');
   info('Each role can use an installed agent skill for domain-specific expertise.');
   info('E.g. assign "full-stack-developer" to DEV, "javascript-testing-patterns" to QC.\n');
@@ -336,7 +336,7 @@ async function main() {
   fs.writeFileSync(RUNTIME_CFG, rcSkill);
   ok('role_skills written to runtime-config.yml');
 
-  // Step 5b: Role models
+  // Step 4b: Role models
   step('Model selection per role');
   const ROLES = [
     { key: 'pm', label: 'PM  (Project Manager)' },
@@ -386,7 +386,7 @@ async function main() {
   fs.writeFileSync(RUNTIME_CFG, rc);
   ok('role_models written to runtime-config.yml');
 
-  // Step 5c: Scheduler mode
+  // Step 4c: Scheduler mode
   step('Scheduler mode');
   info('openclaw-cron (default) registers ceremonies with OpenClaw cron.');
   info('direct-worker (experimental) runs ceremonies directly via file-backed scheduler.\n');
@@ -412,7 +412,7 @@ async function main() {
     }
   }
 
-  // Step 6: Project
+  // Step 5: Project
   step('Project setup');
   let idea = getArg('--idea');
   if (!idea && !NON_INTERACTIVE) idea = await ask(rl, '  What do you want to build?\n  > ');
@@ -424,7 +424,7 @@ async function main() {
   patchYamlLine(RUNTIME_CFG, 'active', `"${projectId}"`);
   ok(`Project ID → ${projectId}`);
 
-  // Step 6b: Dedicated agent (always created, named <project-id>-pm)
+  // Step 5b: Dedicated agent (always created, named <project-id>-pm)
   const chosenAgentId = `${projectId}-pm`;
   step(`Agent: creating dedicated agent '${chosenAgentId}'`);
   if (!agentExists(chosenAgentId)) {
@@ -440,11 +440,11 @@ async function main() {
 
   rl.close();
 
-  // Step 7: start-idea
+  // Step 6: start-idea
   step(`Running discovery for: "${idea}"`);
   run(`node .openclaw/orchestrator.js start-idea --idea "${idea.replace(/"/g, '\\"')}" --project "${projectId}"`, REPO_ROOT);
 
-  // Step 8: scheduler
+  // Step 7: scheduler
   const runtimeConfig = YAML.parse(fs.readFileSync(RUNTIME_CFG, 'utf8')) || {};
   const schedulerMode = runtimeConfig.scheduler && runtimeConfig.scheduler.mode
     ? runtimeConfig.scheduler.mode
