@@ -27,10 +27,9 @@ Ask each question below in order. Wait for the user's answer before moving to th
 
 > **CRITICAL RULES — never break these:**
 > 1. "Yes", "ok", "go on", "sure", "sounds good" in response to any single question ONLY confirms that one answer. It does NOT mean "skip all remaining questions" or "run setup now".
-> 2. You MUST ask all 7 questions (Q1–Q7) before moving to Setup Invocation. Never jump to setup after Q1 or Q2.
+> 2. You MUST ask all 5 questions (Q1–Q5) before moving to Setup Invocation. Never jump to setup after Q1 or Q2.
 > 3. The post-setup open questions ("Who is the highest-priority user segment…" etc.) are generated AFTER setup runs. Never ask them during Config Collection.
-> 4. After confirming the project ID (Q2), your very next message must be Q3 (agent selection). No exceptions.
-> 5. After Q7 is answered, do NOT run setup. You MUST show the full command preview and wait for the user to say **"yes"** before running anything.
+> 4. After Q5 is answered, do NOT run setup. You MUST show the full command preview and wait for the user to say **"yes"** before running anything.
 
 ---
 
@@ -50,31 +49,11 @@ Ask each question below in order. Wait for the user's answer before moving to th
 - Derive the slug: lowercase the idea, strip punctuation, remove stop words (`i`, `want`, `to`, `build`, `create`, `make`, `a`, `an`, `the`, `let`, `us`, `let's`, `help`, `me`, `new`, `my`, `develop`, `design`), take the first 4 remaining words, join with `-`. Example: "I want to build a tower defense game" → `tower-defense-game`.
 - Store as `$PROJECT_ID`.
 
----
-
-**Question 3 — OpenClaw agent** *(required, default: `main`)*
-
-Run `openclaw agents list` (or `wsl openclaw agents list` on Windows) to get available agents. Parse the output: each `- <id>` line is an agent ID; the one tagged `(default)` is the default (fall back to `main` if none is tagged). **Never hardcode agent names** — always use the live output. Present a **numbered list** including a "Create new" option and ask:
-
-> "Which OpenClaw agent should run this project?
-> ```
->  1. <first agent id>  ← default
->  2. <second agent id>
->  ... [all agents from `openclaw agents list`]
->  N. Create a new agent
-> ```
-> Pick a number, or type a new agent ID to create one."
-
-- **Always include the "Create a new agent" option** as the last numbered item — do not omit it even if agents already exist.
-- If the user picks an existing number, use that agent ID.
-- If the user picks the "Create" number or types a string that is not a number, prompt: "New agent ID (e.g. `scrum-pm`):" and use that as a new agent ID.
-- Store as `$AGENT`.
-
-> 💡 **Recommended: create a dedicated agent per project.** Suggest `<project-id>-pm` as the default name (replace `<project-id>` with `$PROJECT_ID`). A dedicated agent keeps its memory scoped to this project only — when the project is finished, the agent and its memory are cleaned up automatically. Shared agents (e.g. `main`, `frieren`) accumulate cross-project memory and can cause context pollution. Mention this when presenting the choices and pre-fill the "New agent ID" prompt with `$PROJECT_ID-pm`.
+> 💡 A dedicated agent `$PROJECT_ID-pm` will be created automatically. It keeps memory scoped to this project only — cleaned up when the project finishes.
 
 ---
 
-**Question 4 — Discord webhook URL** *(optional)*
+**Question 3 — Discord webhook URL** *(optional)*
 
 Show these instructions inline before asking:
 ```
@@ -90,7 +69,7 @@ To get a webhook URL:
 
 ---
 
-**Question 6 — Models per role** *(optional)*
+**Question 4 — Models per role** *(optional)*
 
 Before asking, run `openclaw models list` (or `wsl openclaw models list` on Windows). Parse the tabular output: the first column of each data row is the model ID; the row tagged `default` is the default model. **Never hardcode model names** — always use the live output. If the command fails, fall back to asking the user to type a model ID freely.
 
@@ -114,7 +93,7 @@ Then ask in a single message block, listing the available models:
 
 ---
 
-**Question 7 — Skills per role** *(optional)*
+**Question 5 — Skills per role** *(optional)*
 
 Before asking, do the following:
 1. Run `ls ~/.agents/skills/` to list installed skills.
@@ -158,12 +137,12 @@ Before I run setup, I need a few details:
 
 1. Project directory (absolute path, required): ___
 2. Project ID [<derived-slug>]: ___
-3. OpenClaw agent [main]: ___
-4. Discord channel ID (Enter to skip): ___
-5. Discord bot token (Enter to skip): ___
-6. Models — PM / PO / DEV / QC [default from ~/.openclaw/openclaw.json → .agents.defaults.model]: ___
-7. Skills — PM / PO / DEV / QC (Enter to skip each): ___
+3. Discord webhook URL (Enter to skip): ___
+4. Models — PM / PO / DEV / QC [default from ~/.openclaw/openclaw.json → .agents.defaults.model]: ___
+5. Skills — PM / PO / DEV / QC (Enter to skip each): ___
 ```
+
+*(Agent `$PROJECT_ID-pm` is always created automatically — no need to specify it.)*
 
 Parse all answers from the user's single reply before proceeding.
 
@@ -191,7 +170,6 @@ node ~/.agents/skills/agent-orchestration-workflow/scripts/setup.js \
   --project-dir "$PROJECT_DIR" \
   --idea "$IDEA" \
   --project-id "$PROJECT_ID" \
-  --agent "$AGENT" \
   [--webhook-url "$WEBHOOK_URL"] \
   [--model-pm "$MODEL_PM"] \         ← AI model ID e.g. github-copilot/gpt-5-mini
   [--model-po "$MODEL_PO"] \         ← AI model ID
@@ -274,8 +252,6 @@ Interactive wizard: scaffolds `.openclaw/`, picks/creates an OpenClaw agent, wir
 **Non-interactive:**
 ```bash
 node ~/.agents/skills/agent-orchestration-workflow/scripts/setup.js \
-  --agent main \
-  --channel 1234567890 \
   --idea "Build an app like Airbnb" \
   --project-id airbnb-clone \
   --model-pm github-copilot/claude-sonnet-4.6 \

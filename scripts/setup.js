@@ -245,36 +245,7 @@ async function main() {
     ok('runtime-config.yml → openclaw via wsl (Windows detected)');
   }
 
-  // Step 2: Agent
-  step('Agent setup');
-  const existingAgents = listAgents();
-  const agentIds = existingAgents.map(a => a.id);
-  let chosenAgentId = getArg('--agent');
-
-  if (!chosenAgentId && !NON_INTERACTIVE) {
-    if (agentIds.length > 0) {
-      console.log('\n  Existing agents:');
-      agentIds.forEach((id, i) => console.log(`    ${i + 1}. ${id}`));
-      console.log(`    ${agentIds.length + 1}. Create a new agent`);
-      const a = await ask(rl, '\n  Pick number or type a new agent ID');
-      const n = parseInt(a, 10);
-      if (!isNaN(n) && n >= 1 && n <= agentIds.length) { chosenAgentId = agentIds[n - 1]; ok(`Using existing agent: ${chosenAgentId}`); }
-      else chosenAgentId = (!isNaN(n) && n === agentIds.length + 1) ? await ask(rl, '  New agent ID', 'scrum-pm') : (a.trim() || 'scrum-pm');
-    } else {
-      info('No existing agents found.');
-      chosenAgentId = await ask(rl, '  New agent ID', 'scrum-pm');
-    }
-  }
-  chosenAgentId = chosenAgentId || 'scrum-pm';
-
-  const isNewAgent = !agentExists(chosenAgentId);
-  if (isNewAgent) { const c = createAgent(chosenAgentId); if (!c) warn(`Could not create agent. Continuing with config only.`); }
-  else ok(`Using existing agent: ${chosenAgentId}`);
-
-  // Mark whether this project owns its agent (used by `finish` command for cleanup)
-  patchYamlLine(RUNTIME_CFG, 'dedicated_agent', isNewAgent ? 'true' : 'false');
-
-  // Step 3: Discord webhook
+  // Step 2: Discord webhook
   step('Discord webhook setup');
   let webhookUrl = getArg('--webhook-url');
 
@@ -308,11 +279,6 @@ async function main() {
       warn('No webhook URL — Discord disabled. Set webhook_url in .openclaw/discord-config.yml later.');
     }
   }
-
-  // Step 5: runtime-config.yml
-  patchYamlLine(RUNTIME_CFG, 'agent', `"${chosenAgentId}"`);
-  patchYamlLine(RUNTIME_CFG, 'cron_agent', `"${chosenAgentId}"`);
-  ok(`runtime-config.yml → agent: ${chosenAgentId}`);
 
   // Step 5a: Role skills
   step('Role skill assignment (optional)');
@@ -457,6 +423,21 @@ async function main() {
   projectId = projectId || deriveProjectId(idea);
   patchYamlLine(RUNTIME_CFG, 'active', `"${projectId}"`);
   ok(`Project ID → ${projectId}`);
+
+  // Step 6b: Dedicated agent (always created, named <project-id>-pm)
+  const chosenAgentId = `${projectId}-pm`;
+  step(`Agent: creating dedicated agent '${chosenAgentId}'`);
+  if (!agentExists(chosenAgentId)) {
+    const c = createAgent(chosenAgentId);
+    if (!c) warn('Could not create agent. Continuing with config only.');
+  } else {
+    ok(`Agent '${chosenAgentId}' already exists — reusing`);
+  }
+  patchYamlLine(RUNTIME_CFG, 'dedicated_agent', 'true');
+  patchYamlLine(RUNTIME_CFG, 'agent', `"${chosenAgentId}"`);
+  patchYamlLine(RUNTIME_CFG, 'cron_agent', `"${chosenAgentId}"`);
+  ok(`runtime-config.yml → agent: ${chosenAgentId}`);
+
   rl.close();
 
   // Step 7: start-idea
@@ -486,7 +467,7 @@ async function main() {
 ║  ✅ Scrum Orchestrator Setup Complete                ║
 ╚══════════════════════════════════════════════════════╝
 
-  Agent:    ${chosenAgentId} (${isNewAgent ? 'newly created' : 'existing'})
+  Agent:    ${chosenAgentId} (dedicated)
   Discord:  ${discordStatus}
   Project:  ${projectId}
   Docs:     ./docs/
