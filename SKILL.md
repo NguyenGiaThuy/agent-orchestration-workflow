@@ -72,7 +72,7 @@ Run `openclaw agents list` (or `wsl openclaw agents list` on Windows) to get ava
 
 ---
 
-> **Discord pre-check** — If the user chose an **existing** agent, read `~/.openclaw/agents/<agentId>/agent/auth-profiles.json`. If any key starting with `discord:` exists in the `profiles` object, Discord is already wired — **skip Q4 and Q5 entirely** and say: "Discord is already configured for agent `<agentId>` — skipping Discord setup."
+> **Discord pre-check** — If the user chose an **existing** agent, read `~/.openclaw/agents/<agentId>/agent/auth-profiles.json`. If any key starting with `discord:` exists in the `profiles` object, Discord is already wired — **skip Q5 only** (bot token) and say: "Discord bot is already configured for agent `<agentId>` — skipping token setup. I still need the channel ID for posting."
 
 ---
 
