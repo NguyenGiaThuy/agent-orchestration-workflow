@@ -70,6 +70,8 @@ Run `openclaw agents list` (or `wsl openclaw agents list` on Windows) to get ava
 - If the user picks the "Create" number or types a string that is not a number, prompt: "New agent ID (e.g. `scrum-pm`):" and use that as a new agent ID.
 - Store as `$AGENT`.
 
+> 💡 **Recommended: create a dedicated agent per project.** Suggest `<project-id>-pm` as the default name (replace `<project-id>` with `$PROJECT_ID`). A dedicated agent keeps its memory scoped to this project only — when the project is finished, the agent and its memory are cleaned up automatically. Shared agents (e.g. `main`, `frieren`) accumulate cross-project memory and can cause context pollution. Mention this when presenting the choices and pre-fill the "New agent ID" prompt with `$PROJECT_ID-pm`.
+
 ---
 
 **Question 4 — Discord webhook URL** *(optional)*

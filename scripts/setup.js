@@ -271,6 +271,9 @@ async function main() {
   if (isNewAgent) { const c = createAgent(chosenAgentId); if (!c) warn(`Could not create agent. Continuing with config only.`); }
   else ok(`Using existing agent: ${chosenAgentId}`);
 
+  // Mark whether this project owns its agent (used by `finish` command for cleanup)
+  patchYamlLine(RUNTIME_CFG, 'dedicated_agent', isNewAgent ? 'true' : 'false');
+
   // Step 3: Discord webhook
   step('Discord webhook setup');
   let webhookUrl = getArg('--webhook-url');

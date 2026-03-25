@@ -24,6 +24,7 @@ openclaw:
   agent: "main"
   cron_agent: "main"
   local: true
+  dedicated_agent: false  # set to true by setup.js when a new agent is created for this project
   timeout_ms: 120000
   fallback_to_templates: true
   save_transcripts: true

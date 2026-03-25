@@ -18,7 +18,8 @@ const WORKFLOW_STATES = Object.freeze({
   READY_FOR_APPROVAL: 'READY_FOR_APPROVAL',
   APPROVED_FOR_IMPLEMENTATION: 'APPROVED_FOR_IMPLEMENTATION',
   IN_SPRINT: 'IN_SPRINT',
-  RELEASE_CANDIDATE: 'RELEASE_CANDIDATE'
+  RELEASE_CANDIDATE: 'RELEASE_CANDIDATE',
+  FINISHED: 'FINISHED'
 });
 
 const DEFAULT_RUNTIME_CONFIG = {
@@ -949,8 +950,70 @@ class AutonomousScrumOrchestrator {
     return retro;
   }
 
+  async finishProject() {
+    this.assertProjectSelected();
+    this.assertWorkflowStateAllowed('finish', [
+      WORKFLOW_STATES.IN_SPRINT,
+      WORKFLOW_STATES.RELEASE_CANDIDATE
+    ]);
+
+    const state = this.loadState();
+    const timestamp = new Date().toISOString();
+    state.status = WORKFLOW_STATES.FINISHED;
+    state.finished_at = timestamp;
+    state.updated_at = timestamp;
+    this.saveState(state);
+
+    // Unregister cron ceremonies
+    const { spawnSync: _sp } = require('child_process');
+    const unregisterScript = require('path').join(this.projectDir, '.openclaw', 'unregister-openclaw-cron.js');
+    if (require('fs').existsSync(unregisterScript)) {
+      const unregResult = _sp(process.execPath, [unregisterScript], { encoding: 'utf-8', cwd: this.projectDir, timeout: 30000 });
+      if (unregResult.status !== 0) {
+        console.warn('[finish] Cron unregister warning:', unregResult.stderr || 'non-zero exit');
+      }
+    }
+
+    // Delete dedicated agent if this project created one
+    const dedicatedAgent = this.getConfigValue(this.runtimeConfig, ['openclaw', 'dedicated_agent']);
+    const agentId = this.getConfigValue(this.runtimeConfig, ['openclaw', 'agent']) || '';
+    let agentDeleted = false;
+    if (dedicatedAgent === true || dedicatedAgent === 'true') {
+      const oclCmd = this.getConfigValue(this.runtimeConfig, ['openclaw', 'command']) || 'openclaw';
+      const oclBaseArgs = Array.isArray(this.getConfigValue(this.runtimeConfig, ['openclaw', 'args']))
+        ? this.getConfigValue(this.runtimeConfig, ['openclaw', 'args']) : [];
+      const delResult = _sp(oclCmd, [...oclBaseArgs, 'agents', 'delete', agentId, '--non-interactive'], { encoding: 'utf-8', timeout: 15000 });
+      if (delResult.status === 0) {
+        agentDeleted = true;
+      } else {
+        console.warn(`[finish] Could not delete agent '${agentId}':`, delResult.stderr || 'non-zero exit');
+      }
+    } else {
+      console.log(`[finish] Agent '${agentId}' is shared — skipping deletion. Remove manually if no longer needed.`);
+    }
+
+    const projectName = state.project_name || this.titleizeProjectId(this.projectId);
+    await this.sendDiscordNotification('ceremony_update', {
+      title: `${projectName}: project finished 🎉`,
+      summary: `**${projectName}** has been marked complete. Ceremonies unregistered${agentDeleted ? `, agent \`${agentId}\` deleted` : ''}.`,
+      bullets: [
+        `Finished at: ${timestamp}`,
+        agentDeleted ? `✔ Dedicated agent \`${agentId}\` deleted` : `ℹ️ Shared agent \`${agentId}\` kept — remove manually if no longer needed`,
+        '✔ Cron ceremonies unregistered'
+      ]
+    });
+
+    return { finished: true, project_id: this.projectId, finished_at: timestamp, agent_deleted: agentDeleted, agent_id: agentId };
+  }
+
   async dailyActivityDigest() {
     this.assertProjectSelected();
+
+    const state = this.loadState();
+    if (state.status === WORKFLOW_STATES.FINISHED) {
+      return { skipped: true, reason: 'Project is finished — no digest needed.', status: WORKFLOW_STATES.FINISHED };
+    }
+
     this.assertWorkflowStateAllowed('daily-digest', [
       WORKFLOW_STATES.DISCOVERY_IN_PROGRESS,
       WORKFLOW_STATES.AWAITING_USER_INPUT,
@@ -959,7 +1022,6 @@ class AutonomousScrumOrchestrator {
       WORKFLOW_STATES.IN_SPRINT,
       WORKFLOW_STATES.RELEASE_CANDIDATE
     ]);
-    const state = this.loadState();
     const blockers = this.loadBlockerLog().filter(blocker => blocker.status !== 'RESOLVED');
     const backlog = this.loadBacklog();
     const pmDigest = await this.buildDailyDigestNote(state, backlog, blockers);
@@ -1589,6 +1651,13 @@ class AutonomousScrumOrchestrator {
           ? `Run implement to have DEV write code and QC write tests for the ${remainingInSprint} remaining IN_SPRINT ${remainingInSprint === 1 ? 'story' : 'stories'}.`
           : 'Run sprint-planning to commit stories to the next sprint.',
         'Use daily standup and QC sync to track progress and surface blockers.'
+      ];
+    }
+
+    if (state.status === WORKFLOW_STATES.RELEASE_CANDIDATE) {
+      return [
+        'Run finish to mark the project complete and clean up the dedicated agent.',
+        'Run retrospective first to capture final sprint learnings if not done yet.'
       ];
     }
 
@@ -3285,6 +3354,7 @@ Commands:
   sprint-review       Run the sprint review
   retrospective       Run the retrospective
   daily-digest        Publish the daily activity digest
+  finish              Mark project complete, unregister ceremonies, delete dedicated agent
   status              Print workflow state
 
 Feedback options:
@@ -3328,6 +3398,7 @@ if (require.main === module) {
     'sprint-review': () => orchestrator.sprintReviewCeremony(sprintId),
     retrospective: () => orchestrator.retrospectiveCeremony(sprintId),
     'daily-digest': () => orchestrator.dailyActivityDigest(),
+    finish: () => orchestrator.finishProject(),
     status: () => Promise.resolve(orchestrator.getStatus()),
     help: async () => printHelp()
   };
