@@ -27,9 +27,9 @@ Ask each question below in order. Wait for the user's answer before moving to th
 
 > **CRITICAL RULES — never break these:**
 > 1. "Yes", "ok", "go on", "sure", "sounds good" in response to any single question ONLY confirms that one answer. It does NOT mean "skip all remaining questions" or "run setup now".
-> 2. You MUST ask all 4 questions (Q1–Q4) before moving to Setup Invocation. Never jump to setup after Q1 or Q2.
+> 2. You MUST ask all 5 questions (Q1–Q5) before moving to Setup Invocation. Never jump to setup after Q1 or Q2.
 > 3. The post-setup open questions ("Who is the highest-priority user segment…" etc.) are generated AFTER setup runs. Never ask them during Config Collection.
-> 4. After Q4 is answered, do NOT run setup. You MUST show the full command preview and wait for the user to say **"yes"** before running anything.
+> 4. After Q5 is answered, do NOT run setup. You MUST show the full command preview and wait for the user to say **"yes"** before running anything.
 
 ---
 
@@ -69,21 +69,22 @@ To get a webhook URL:
 
 ---
 
-**Question 4 — Models & Skills per role** *(optional, always asked together in one message)*
+**Question 4 — Models per role** *(optional)*
 
-> **ALWAYS combine Q4 and Q5 into a single message.** Do not ask models, wait for a reply, then ask skills. Both are role-assignment questions — present them together.
+Before asking, run `openclaw models list` (or `wsl openclaw models list` on Windows). Parse the tabular output: the first column of each data row is the model ID; the row tagged `default` is the default model. **Never hardcode model names** — always use the live output. If the command fails, fall back to asking the user to type a model ID freely.
 
-**Models:** Run `openclaw models list` (or `wsl openclaw models list` on Windows). Parse the tabular output: first column = model ID; row tagged `default` = default model. **Never hardcode model names.** If the command fails, fall back to free text.
+**Question 5 — Skills per role** *(optional)*
 
-**Skills:** Run `ls ~/.agents/skills/`. For each skill read the `description` field from its `SKILL.md` frontmatter (first 10 lines). Based on descriptions, propose a sensible default per role:
-- **PM**: prefer orchestration, project management, workflow, planning
-- **PO**: prefer product, business, requirements, domain analysis, specifications
-- **DEV**: prefer full-stack, coding, implementation, or tech stack implied by the project idea
-- **QC**: prefer testing, quality, e2e, validation, test automation
+Before asking, do the following:
+1. Run `ls ~/.agents/skills/` to list installed skills.
+2. For each skill, read the `description` field from its `SKILL.md` frontmatter (first 10 lines are enough).
+3. Based on the descriptions, **propose a sensible default for each role**:
+   - **PM**: prefer skills mentioning orchestration, project management, workflow, or planning
+   - **PO**: prefer skills mentioning product, business, requirements, domain analysis, or specifications
+   - **DEV**: prefer skills mentioning full-stack, coding, implementation, or the tech stack implied by the project idea
+   - **QC**: prefer skills mentioning testing, quality, e2e, validation, or test automation
 
-**NEVER assign `agent-orchestration-workflow` to any role** — it is the orchestrator skill itself.
-
-Ask in a **single message block**:
+> **Q4 and Q5 are always presented together in one message.** Run both preparatory commands first, then ask models and skills in a single block:
 
 > "Which AI model should each role use? Available models:
 > 1. \<first model id\>  *(default)*
@@ -112,9 +113,11 @@ Ask in a **single message block**:
 > After that, I'll show the exact setup command for your approval."
 
 - For models: accept a number or full model ID string; Enter = default model.
-- For skills: propose `none` only when no installed skill is a reasonable fit; do NOT leave all roles skill-less if relevant skills exist.
-- Parse the user's single reply for both models and skills before moving on.
-- Store as `$MODEL_PM`, `$MODEL_PO`, `$MODEL_DEV`, `$MODEL_QC`, `$SKILL_PM`, `$SKILL_PO`, `$SKILL_DEV`, `$SKILL_QC`.
+- If the user answers all at once (one line per role), parse their answers.
+- Store as `$MODEL_PM`, `$MODEL_PO`, `$MODEL_DEV`, `$MODEL_QC`.
+- For skills: propose `none` for a role only when no installed skill is a reasonable fit; do NOT leave all roles skill-less if relevant skills are installed.
+- **NEVER assign `agent-orchestration-workflow` to any role** — it is the orchestrator skill itself and will break discovery if injected into a role prompt.
+- Store as `$SKILL_PM`, `$SKILL_PO`, `$SKILL_DEV`, `$SKILL_QC`.
 - If all skills are none, omit `--skill-*` flags from the setup command.
 
 ---
@@ -130,7 +133,7 @@ Before I run setup, I need a few details:
 2. Project ID [<derived-slug>]: ___
 3. Discord webhook URL (Enter to skip): ___
 4. Models — PM / PO / DEV / QC [default from `openclaw models list`]: ___
-   Skills — PM / PO / DEV / QC (Enter to skip each): ___
+5. Skills — PM / PO / DEV / QC (Enter to skip each): ___
 ```
 
 *(Agent `$PROJECT_ID-pm` is always created automatically — no need to specify it.)*
@@ -151,7 +154,7 @@ Using the collected values, build the setup command and **show it to the user fo
 
 > **FLAG TYPES — do NOT mix these up:**
 > - `--model-*` flags take **AI model IDs** from Q4 (e.g. `github-copilot/gpt-5-mini`) — values from `$MODEL_PM`, `$MODEL_PO`, `$MODEL_DEV`, `$MODEL_QC`
-> - `--skill-*` flags take **skill folder names** from Q4 (e.g. `full-stack-developer`) — values from `$SKILL_PM`, `$SKILL_PO`, `$SKILL_DEV`, `$SKILL_QC`
+> - `--skill-*` flags take **skill folder names** from Q5 (e.g. `full-stack-developer`) — values from `$SKILL_PM`, `$SKILL_PO`, `$SKILL_DEV`, `$SKILL_QC`
 > - **NEVER** put a model ID into a `--skill-*` flag, or a skill name into a `--model-*` flag.
 
 ```
