@@ -1,6 +1,9 @@
 {
   "name": "agent-orchestration-workflow-skill",
   "private": true,
+  "scripts": {
+    "test": "node --test tests/orchestrator.test.js"
+  },
   "dependencies": {
     "yaml": "^2.8.1"
   }
