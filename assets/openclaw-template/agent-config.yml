@@ -1,0 +1,172 @@
+---
+# OpenClaw Agent Configuration
+# Autonomous Scrum team: PM, PO, DEV, QC
+# NOTE: The `tools` lists below are capability labels for maintainers and prompt authors.
+# They are not automatically bound runtime tools. Actual executable tools come from the
+# configured OpenClaw agent/environment plus orchestrator.js command handlers.
+
+agents:
+  pm:
+    name: "Project Manager"
+    slug: "pm-orchestrator"
+    model: "gpt-4"
+    persona: |
+      You are the Project Manager for an autonomous Scrum workflow.
+      Responsibilities:
+      - Own the workflow state and approval gate before implementation starts.
+      - Consolidate PO, DEV, and QC outputs into sprint-ready delivery plans.
+      - Run Scrum ceremonies, track blockers, and escalate risks quickly.
+      - Publish daily activity summaries and important alerts to Discord.
+      - Keep the team focused on one active project at a time.
+
+      Communication style: clear, concise, action-oriented, and explicit about next steps.
+    capabilities:
+      - sprint_tracker
+      - blockers_registry
+      - approval_gate_manager
+      - discord_reporting
+
+  po:
+    name: "Product Owner"
+    slug: "po-product"
+    model: "gpt-4"
+    persona: |
+      You are the Product Owner.
+      Responsibilities:
+      - Lead domain and business discovery.
+      - Define the problem statement, scope, assumptions, and open questions.
+      - Produce product requirements, backlog priorities, and acceptance direction.
+      - Clarify product ambiguity quickly during discovery and sprint execution.
+      - Protect approved scope while still documenting change requests explicitly.
+
+      Communication style: structured, business-first, and explicit about value and tradeoffs.
+    capabilities:
+      - product_requirements_manager
+      - backlog_templates
+      - acceptance_criteria_builder
+      - business_rules_engine
+
+  developer:
+    name: "Developer"
+    slug: "dev-implementation"
+    model: "gpt-4"
+    persona: |
+      You are the Developer.
+      Responsibilities:
+      - Translate approved product requirements into implementation slices.
+      - Flag technical risks, dependencies, and feasibility concerns early.
+      - Implement approved work, keep code testable, and document technical decisions.
+      - Collaborate with PO and QC on ambiguous requirements and release risk.
+      - Keep delivery increments small enough for sprint-level validation.
+
+      Communication style: technical, direct, and early about risk.
+    capabilities:
+      - git_operations
+      - code_quality_checker
+      - deployment_pipeline
+      - technical_blocker_registry
+
+  qc:
+    name: "QC"
+    slug: "qc-quality"
+    model: "gpt-4"
+    persona: |
+      You are the Quality Control lead.
+      Responsibilities:
+      - Turn PO and DEV outputs into scenario coverage and release checks.
+      - Track defects with severity, reproduction steps, and release impact.
+      - Define regression coverage before implementation starts.
+      - Verify fixes, monitor release readiness, and keep quality risk visible.
+      - Make sure QC evidence exists before PM marks work ready for review.
+
+      Communication style: precise, risk-aware, and evidence-based.
+    capabilities:
+      - test_management
+      - bug_tracker
+      - test_automation
+      - coverage_reporter
+
+ceremonies:
+  discovery_sync:
+    schedule: "cron('0 8 * * 1-5')"
+    duration_minutes: 30
+    attendees: [pm, po, developer, qc]
+    agenda: "Refresh discovery docs, assumptions, open questions, and approval readiness"
+    output: "Updated charter, requirements, technical design, QC strategy, approval package"
+
+  daily_standup:
+    schedule: "cron('0 9 * * 1-5')"
+    duration_minutes: 15
+    attendees: [pm, po, developer, qc]
+    agenda: "Progress update, blockers, delivery focus, and next action"
+    output: "Standup notes and blocker updates"
+
+  sprint_planning:
+    schedule: "cron('0 10 * * 1')"
+    duration_minutes: 120
+    attendees: [pm, po, developer, qc]
+    agenda: "Move approved backlog into an implementation-ready sprint"
+    input: "Approved backlog and discovery package"
+    output: "Sprint plan, task assignments, QC scope, capacity check"
+
+  daily_qc_sync:
+    schedule: "cron('0 14 * * 1-5')"
+    duration_minutes: 30
+    attendees: [developer, qc]
+    agenda: "QC scenario status, defect triage, retest requests, release risks"
+    output: "QC status report and release-risk snapshot"
+
+  sprint_review:
+    schedule: "cron('0 15 * * 5')"
+    duration_minutes: 90
+    attendees: [pm, po, developer, qc, stakeholders]
+    agenda: "Demo completed scope, review metrics, confirm release decision"
+    input: "Completed stories, QC evidence, and sprint metrics"
+    output: "Sprint summary, stakeholder feedback, go/no-go decision"
+
+  retrospective:
+    schedule: "cron('0 16 * * 5')"
+    duration_minutes: 45
+    attendees: [pm, po, developer, qc]
+    agenda: "Inspect process, identify improvements, and commit actions for the next sprint"
+    output: "Retrospective notes and action items"
+
+  daily_activity_digest:
+    schedule: "cron('0 18 * * 1-5')"
+    duration_minutes: 10
+    attendees: [pm]
+    agenda: "Publish the daily project summary to Discord"
+    output: "Discord daily digest"
+
+sprint:
+  duration_days: 10
+  start_day: "Monday"
+  ceremonies_buffer: 120
+  velocity_tracking: true
+  retrospective_metrics:
+    - planned_vs_completed
+    - bug_escape_rate
+    - qc_readiness
+    - team_velocity
+    - blockers_by_type
+
+state:
+  storage: "project_docs"
+  root_project_layout: true
+  docs_dir: "docs"
+  entities:
+    - workflow_state
+    - project_charter
+    - product_requirements
+    - technical_design
+    - qc_strategy
+    - backlog
+    - sprint_plan
+    - blocker_registry
+    - retrospective_notes
+    - stakeholder_feedback
+    - approval_request
+
+notifications:
+  provider: "discord"
+  config_file: ".openclaw/discord-config.yml"

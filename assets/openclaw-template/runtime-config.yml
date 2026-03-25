@@ -1,0 +1,54 @@
+# Runtime settings for the active OpenClaw Scrum workflow.
+
+project:
+  active: "ecommerce-app"
+
+storage:
+  docs_dir: "docs"
+
+workflow:
+  approval_required_for_implementation: true
+  use_documented_assumptions: true
+  stop_on_open_questions: false
+
+reporting:
+  daily_digest_enabled: true
+  send_ceremony_updates: true
+  auto_request_approval_after_discovery: true
+
+openclaw:
+  mode: "auto"
+  adapter: "agent-cli"
+  command: "openclaw"
+  args: []
+  agent: "main"
+  cron_agent: "main"
+  local: false
+  timeout_ms: 120000
+  fallback_to_templates: true
+  save_transcripts: true
+  transcript_dir: "agent-turns"
+
+failure_alerts:
+  enabled: true
+  # "webhook" sends to the Discord webhook URL from discord-config.yml.
+  # "announce" sends via the OpenClaw Discord bot (requires a channel/user ID in "to").
+  mode: "webhook"
+  # Leave "to" empty to auto-read the webhook URL from discord-config.yml.
+  to: ""
+  # Alert after this many consecutive failures (1 = on first failure).
+  after: 1
+  # Minimum time between repeated alerts for the same job.
+  cooldown: "1h"
+role_skills:
+  pm: "" # e.g. "full-stack-developer" — SKILL.md injected into PM prompts
+  po: "" # e.g. "react-tanstack-senior"
+  developer: "" # e.g. "full-stack-developer"
+  qc: "" # e.g. "javascript-testing-patterns"
+
+validation:
+  enabled: false
+  command: "" # e.g. "npm"
+  args: [] # e.g. ["test", "--", "--runInBand"]
+  cwd: "." # relative to the active project directory
+  timeout_ms: 120000

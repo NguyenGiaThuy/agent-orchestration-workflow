@@ -1,0 +1,195 @@
+# OpenClaw ceremony schedule for the autonomous PM/PO/DEV/QC workflow.
+# These entries are intended for OpenClaw cron registration.
+
+ceremonies:
+  discovery_sync:
+    name: "Discovery Sync"
+    command: "discovery-sync"
+    schedule: "cron('0 8 * * 1-5')"
+    timezone: "Asia/Bangkok"
+    preconditions:
+      states: [DISCOVERY_IN_PROGRESS, AWAITING_USER_INPUT, READY_FOR_APPROVAL]
+    payload:
+      kind: "agentTurn"
+      message: |
+        Refresh the active project discovery package.
+
+        PO updates the business framing, assumptions, and open questions.
+        DEV refreshes the technical design and delivery slices.
+        QC refreshes scenarios, release risks, and quality gates.
+        PM consolidates changes and decides whether approval should be requested.
+      model: "gpt-4"
+      thinking: "medium"
+    delivery:
+      provider: "discord"
+      route_label: "daily-activity"
+      mention_target: "daily_digest"
+
+  daily_standup:
+    name: "Daily Standup"
+    command: "standup"
+    schedule: "cron('0 9 * * 1-5')"
+    timezone: "Asia/Bangkok"
+    preconditions:
+      states: [READY_FOR_APPROVAL, APPROVED_FOR_IMPLEMENTATION, IN_SPRINT, RELEASE_CANDIDATE]
+    payload:
+      kind: "agentTurn"
+      message: |
+        Provide a short update for the active project.
+
+        1. Yesterday: what changed?
+        2. Today: what is the next highest-value move?
+        3. Blockers: what threatens approval, sprint flow, or release readiness?
+
+        Attendees: PM, PO, DEV, QC.
+        Format: concise, decision-oriented, and explicit about blockers.
+      model: "gpt-4"
+      thinking: "low"
+    delivery:
+      provider: "discord"
+      route_label: "daily-activity"
+      mention_target: "daily_digest"
+
+  sprint_planning:
+    name: "Sprint Planning"
+    command: "sprint-planning"
+    schedule: "cron('0 10 * * 1')"
+    timezone: "Asia/Bangkok"
+    preconditions:
+      states: [APPROVED_FOR_IMPLEMENTATION]
+    payload:
+      kind: "agentTurn"
+      message: |
+        Build the sprint plan from the approved backlog.
+
+        PM owns the sprint goal and capacity guardrails.
+        PO confirms scope and business priority.
+        DEV confirms implementation slices and technical risk.
+        QC confirms scenario coverage and release gates.
+      model: "gpt-4"
+      thinking: "medium"
+    delivery:
+      provider: "discord"
+      route_label: "daily-activity"
+      mention_target: "daily_digest"
+
+  daily_qc_sync:
+    name: "Daily QC Sync"
+    command: "qc-sync"
+    schedule: "cron('0 14 * * 1-5')"
+    timezone: "Asia/Bangkok"
+    preconditions:
+      states: [IN_SPRINT]
+    payload:
+      kind: "agentTurn"
+      message: |
+        Developer and QC sync on active sprint work.
+
+        QC reports scenario readiness, release risks, and defects.
+        DEV reports fixes, retest requests, and technical blockers.
+        Keep the output focused on release risk, not raw activity volume.
+      model: "gpt-4"
+      thinking: "low"
+    delivery:
+      provider: "discord"
+      route_label: "daily-activity"
+      mention_target: "daily_digest"
+
+  sprint_review:
+    name: "Sprint Review"
+    command: "sprint-review"
+    schedule: "cron('0 15 * * 5')"
+    timezone: "Asia/Bangkok"
+    preconditions:
+      states: [IN_SPRINT, RELEASE_CANDIDATE]
+    payload:
+      kind: "agentTurn"
+      message: |
+        Review completed work and decide whether release can proceed.
+
+        PM presents metrics and blockers.
+        DEV demonstrates delivered scope.
+        QC presents release readiness and known issues.
+        PO confirms the business outcome.
+      model: "gpt-4"
+      thinking: "medium"
+    delivery:
+      provider: "discord"
+      route_label: "daily-activity"
+      mention_target: "daily_digest"
+
+  retrospective:
+    name: "Retrospective"
+    command: "retrospective"
+    schedule: "cron('0 16 * * 5')"
+    timezone: "Asia/Bangkok"
+    preconditions:
+      states: [IN_SPRINT, RELEASE_CANDIDATE]
+    payload:
+      kind: "agentTurn"
+      message: |
+        Inspect the sprint process.
+
+        Each role shares what went well, what hurt flow, and what should change next sprint.
+        PM leaves with at most three action items.
+      model: "gpt-4"
+      thinking: "medium"
+    delivery:
+      provider: "discord"
+      route_label: "daily-activity"
+      mention_target: "daily_digest"
+
+  daily_activity_digest:
+    name: "Daily Activity Digest"
+    command: "daily-digest"
+    schedule: "cron('0 18 * * 1-5')"
+    timezone: "Asia/Bangkok"
+    preconditions:
+      states: [DISCOVERY_IN_PROGRESS, AWAITING_USER_INPUT, READY_FOR_APPROVAL, APPROVED_FOR_IMPLEMENTATION, IN_SPRINT, RELEASE_CANDIDATE]
+    payload:
+      kind: "agentTurn"
+      message: |
+        Publish the PM daily digest to Discord.
+
+        Include the workflow state, current blockers, pending approval state, and next recommended action.
+        Keep the message readable in a Discord channel and avoid dumping raw ceremony logs.
+      model: "gpt-4"
+      thinking: "low"
+    delivery:
+      provider: "discord"
+      route_label: "daily-activity"
+      mention_target: "daily_digest"
+
+blocker_rules:
+  escalation_timeout_minutes: 120
+  classification_types: [PO, DEV, QC, EXTERNAL]
+  delivery:
+    provider: "discord"
+    route_label: "blockers"
+    mention_target: "blocker_escalation"
+
+metrics:
+  - collection_point: "after_sprint_review"
+    metrics:
+      - velocity_planned_vs_completed
+      - qc_readiness_percentage
+      - bug_count_by_severity
+      - open_blockers_count
+      - cycle_time_days
+
+  - collection_point: "after_retrospective"
+    metrics:
+      - team_velocity_trend
+      - bug_escape_rate
+      - blocker_resolution_time_hours
+      - process_improvement_score
+      - team_satisfaction_score
+
+deployment:
+  trigger: "sprint_review_go_decision"
+  timing: "same_day_or_next_business_day"
+  pre_deployment_checks:
+    - qc_readiness_minimum: 80
+    - critical_bugs: 0
+    - po_signoff: true
+    - no_open_blockers: true

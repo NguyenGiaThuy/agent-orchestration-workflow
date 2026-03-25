@@ -1,0 +1,7 @@
+{
+  "name": "agent-orchestration-workflow-skill",
+  "private": true,
+  "dependencies": {
+    "yaml": "^2.8.1"
+  }
+}
