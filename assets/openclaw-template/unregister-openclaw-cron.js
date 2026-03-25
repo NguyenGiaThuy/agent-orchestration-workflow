@@ -8,17 +8,32 @@
  *   node .openclaw/unregister-openclaw-cron.js --dry-run  # preview what would be removed
  */
 
+const path = require('path');
+
 const AutonomousScrumOrchestrator = require('./orchestrator');
 const { resolveSchedulerBackend } = require('./scheduler-backends');
 
+function buildEffectiveRuntimeConfig(runtimeConfig, schedulerMode) {
+    if (!schedulerMode) {
+        return runtimeConfig;
+    }
+
+    return {
+        ...runtimeConfig,
+        scheduler: {
+            ...((runtimeConfig && runtimeConfig.scheduler) || {}),
+            mode: schedulerMode
+        }
+    };
+}
+
 function main() {
     const dryRun = process.argv.includes('--dry-run');
+    const schedulerModeIndex = process.argv.indexOf('--scheduler-mode');
+    const schedulerMode = schedulerModeIndex >= 0 ? process.argv[schedulerModeIndex + 1] || '' : '';
     const orchestrator = new AutonomousScrumOrchestrator('');
-    const schedulerBackend = resolveSchedulerBackend(orchestrator.runtimeConfig);
-
-    if (!schedulerBackend.registrationSupported) {
-        throw new Error(`Scheduler mode "${schedulerBackend.mode}" is not supported by unregister-openclaw-cron.js yet.`);
-    }
+    const runtimeConfig = buildEffectiveRuntimeConfig(orchestrator.runtimeConfig, schedulerMode);
+    const schedulerBackend = resolveSchedulerBackend(runtimeConfig, { workspaceDir: path.resolve(__dirname, '..') });
 
     const jobs = schedulerBackend.listJobs().filter(job => job.name.startsWith(schedulerBackend.jobPrefix));
 

@@ -13,7 +13,8 @@ function parseArgs(argv) {
         dryRun: false,
         alertsOnly: false,
         projectId: '',
-        cronAgent: ''
+        cronAgent: '',
+        schedulerMode: ''
     };
 
     for (let index = 0; index < argv.length; index += 1) {
@@ -37,10 +38,30 @@ function parseArgs(argv) {
         if (current === '--cron-agent' && argv[index + 1]) {
             args.cronAgent = argv[index + 1];
             index += 1;
+            continue;
+        }
+
+        if (current === '--scheduler-mode' && argv[index + 1]) {
+            args.schedulerMode = argv[index + 1];
+            index += 1;
         }
     }
 
     return args;
+}
+
+function buildEffectiveRuntimeConfig(runtimeConfig, schedulerMode) {
+    if (!schedulerMode) {
+        return runtimeConfig;
+    }
+
+    return {
+        ...runtimeConfig,
+        scheduler: {
+            ...((runtimeConfig && runtimeConfig.scheduler) || {}),
+            mode: schedulerMode
+        }
+    };
 }
 
 function toWslPath(inputPath) {
@@ -165,21 +186,18 @@ function resolveFailureAlertConfig(runtimeConfig, workspaceDir) {
 function main() {
     const args = parseArgs(process.argv.slice(2));
     const orchestrator = new AutonomousScrumOrchestrator('');
-    const schedulerBackend = resolveSchedulerBackend(orchestrator.runtimeConfig);
     const workspaceDir = toWslPath(path.resolve(__dirname, '..'));
     const absoluteWorkspaceDir = path.resolve(__dirname, '..');
+    const effectiveRuntimeConfig = buildEffectiveRuntimeConfig(orchestrator.runtimeConfig, args.schedulerMode);
+    const schedulerBackend = resolveSchedulerBackend(effectiveRuntimeConfig, { workspaceDir: absoluteWorkspaceDir });
     const nodeExecutable = process.platform === 'win32' ? toWslPath(process.execPath) : process.execPath;
     const projectId = args.projectId || orchestrator.resolveActiveProjectId();
-
-    if (!schedulerBackend.registrationSupported) {
-        throw new Error(`Scheduler mode "${schedulerBackend.mode}" is not supported by register-openclaw-cron.js yet.`);
-    }
 
     if (!projectId) {
         throw new Error('No active project configured. Set project.active in .openclaw/runtime-config.yml or pass --project <id>.');
     }
 
-    const alertConfig = resolveFailureAlertConfig(orchestrator.runtimeConfig, absoluteWorkspaceDir);
+    const alertConfig = resolveFailureAlertConfig(effectiveRuntimeConfig, absoluteWorkspaceDir);
     const results = [];
 
     if (args.alertsOnly) {
@@ -203,7 +221,9 @@ function main() {
         return;
     }
 
-    const cronAgent = resolveCronAgent(orchestrator.runtimeConfig, args.cronAgent, schedulerBackend);
+    const cronAgent = schedulerBackend.mode === 'openclaw-cron'
+        ? resolveCronAgent(effectiveRuntimeConfig, args.cronAgent, schedulerBackend)
+        : '';
     const ceremonyFile = path.join(__dirname, 'ceremonies.yml');
     const ceremonies = parseCeremoniesConfig(ceremonyFile);
     const existingJobs = schedulerBackend.listJobs();
@@ -213,12 +233,15 @@ function main() {
         const name = `${schedulerBackend.jobPrefix}${ceremony.command}`;
         const commandText = buildCommand(workspaceDir, nodeExecutable, ceremony.command, projectId);
         const job = {
+            id: name,
             name,
             description: `Runs ${ceremony.command} for ${projectId}`,
             schedule: ceremony.schedule,
             timezone: ceremony.timezone || 'UTC',
             message: buildCronMessage(ceremony, commandText),
-            agent: cronAgent
+            agent: cronAgent,
+            ceremonyCommand: ceremony.command,
+            projectId
         };
 
         const existingJob = existingByName.get(name);

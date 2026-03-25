@@ -11,6 +11,7 @@ const os = require('os');
 const path = require('path');
 const readline = require('readline');
 const { spawnSync } = require('child_process');
+const YAML = require('yaml');
 
 const SKILL_DIR = path.resolve(__dirname, '..');
 const TEMPLATE_DIR = path.join(SKILL_DIR, 'assets', 'openclaw-template');
@@ -478,9 +479,19 @@ async function main() {
   step(`Running discovery for: "${idea}"`);
   run(`node .openclaw/orchestrator.js start-idea --idea "${idea.replace(/"/g, '\\"')}" --project "${projectId}"`, REPO_ROOT);
 
-  // Step 8: cron
-  step('Registering OpenClaw cron ceremonies');
-  run('node .openclaw/register-openclaw-cron.js', REPO_ROOT);
+  // Step 8: scheduler
+  const runtimeConfig = YAML.parse(fs.readFileSync(RUNTIME_CFG, 'utf8')) || {};
+  const schedulerMode = runtimeConfig.scheduler && runtimeConfig.scheduler.mode
+    ? runtimeConfig.scheduler.mode
+    : 'openclaw-cron';
+
+  if (schedulerMode === 'direct-worker') {
+    step('Syncing direct-worker scheduler jobs');
+    run('node .openclaw/direct-scheduler.js sync', REPO_ROOT);
+  } else {
+    step('Registering OpenClaw cron ceremonies');
+    run('node .openclaw/register-openclaw-cron.js', REPO_ROOT);
+  }
 
   const botStatus = botWired ? `✔ Bot wired (account: discord-${chosenAgentId})`
     : skipBot ? `✔ Using existing account`
@@ -496,7 +507,7 @@ async function main() {
   Bot:      ${botStatus}
   Project:  ${projectId}
   Docs:     ./${projectId}/docs/
-  Cron:     openclaw cron list
+  Scheduler:${schedulerMode === 'direct-worker' ? ' direct-worker (run node .openclaw/direct-scheduler.js tick)' : ' openclaw-cron'}
 
   Review docs then approve:
     node .openclaw/orchestrator.js status ${projectId}

@@ -35,6 +35,13 @@ openclaw:
 scheduler:
   mode: "openclaw-cron"      # "openclaw-cron" | "direct-worker"
   job_prefix: "agent-orchestration-workflow:"
+  direct_worker:
+    state_file: ".openclaw/direct-scheduler-state.json"
+    lock_file: ".openclaw/direct-scheduler.lock"
+    lock_timeout_ms: 900000
+    retry_count: 2
+    retry_backoff_ms: 1000
+    command_timeout_ms: 600000
 
 failure_alerts:
   enabled: true
@@ -58,10 +65,24 @@ When validation is enabled, implementation moves stories into `REVIEW` first, ru
 Scheduler registration is now isolated behind a backend interface.
 
 - `scheduler.mode: openclaw-cron` uses the existing OpenClaw cron registration path through `register-openclaw-cron.js` and `unregister-openclaw-cron.js`.
-- `scheduler.mode: direct-worker` is reserved for the future direct scheduler/worker backend and is not implemented yet in this phase.
+- `scheduler.mode: direct-worker` uses `direct-scheduler.js` to keep a file-backed job registry and execute ceremonies directly with Node instead of going through an OpenClaw cron agent.
 - `scheduler.job_prefix` controls the scheduler job naming prefix so cleanup and re-registration use the same namespace consistently.
+- `scheduler.direct_worker.*` controls the experimental worker's state file, lock file, retry policy, and command timeout.
 
 In the current implementation, `openclaw.cron_agent` only applies when `scheduler.mode` is `openclaw-cron`.
+
+### Direct Worker Commands
+
+When `scheduler.mode` is `direct-worker`, use:
+
+```bash
+node .openclaw/direct-scheduler.js sync   # sync job definitions from ceremonies.yml into the local state file
+node .openclaw/direct-scheduler.js list   # inspect registered direct-worker jobs
+node .openclaw/direct-scheduler.js tick   # run all jobs due right now
+node .openclaw/direct-scheduler.js run --ceremony standup
+```
+
+The direct worker applies a global lock, tracks the last run minute for each job, retries failures using the configured backoff, and stores execution metadata in the scheduler state file.
 
 ## Execution Health
 
@@ -157,7 +178,10 @@ Both are set automatically by `setup.js`. To change them later, edit the YAML an
 node .openclaw/register-openclaw-cron.js
 ```
 
-That command currently manages only the `openclaw-cron` scheduler backend.
+For `direct-worker` mode, sync jobs with:
+```bash
+node .openclaw/direct-scheduler.js sync
+```
 
 ## Discord Bot — Manual Wiring
 

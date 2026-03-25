@@ -32,6 +32,13 @@ openclaw:
 scheduler:
   mode: "openclaw-cron"
   job_prefix: "agent-orchestration-workflow:"
+  direct_worker:
+    state_file: ".openclaw/direct-scheduler-state.json"
+    lock_file: ".openclaw/direct-scheduler.lock"
+    lock_timeout_ms: 900000
+    retry_count: 2
+    retry_backoff_ms: 1000
+    command_timeout_ms: 600000
 
 failure_alerts:
   enabled: true

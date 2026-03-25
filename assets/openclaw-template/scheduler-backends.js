@@ -1,18 +1,32 @@
+const fs = require('fs');
+const path = require('path');
 const { spawnSync } = require('child_process');
 
 const DEFAULT_SCHEDULER_CONFIG = Object.freeze({
     mode: 'openclaw-cron',
-    job_prefix: 'agent-orchestration-workflow:'
+    job_prefix: 'agent-orchestration-workflow:',
+    direct_worker: {
+        state_file: '.openclaw/direct-scheduler-state.json',
+        lock_file: '.openclaw/direct-scheduler.lock',
+        lock_timeout_ms: 900000,
+        retry_count: 2,
+        retry_backoff_ms: 1000,
+        command_timeout_ms: 600000
+    }
 });
 
 function resolveSchedulerConfig(runtimeConfig) {
     return {
         ...DEFAULT_SCHEDULER_CONFIG,
-        ...((runtimeConfig && runtimeConfig.scheduler) || {})
+        ...((runtimeConfig && runtimeConfig.scheduler) || {}),
+        direct_worker: {
+            ...DEFAULT_SCHEDULER_CONFIG.direct_worker,
+            ...((((runtimeConfig && runtimeConfig.scheduler) || {}).direct_worker) || {})
+        }
     };
 }
 
-function resolveSchedulerBackend(runtimeConfig) {
+function resolveSchedulerBackend(runtimeConfig, options = {}) {
     const schedulerConfig = resolveSchedulerConfig(runtimeConfig);
 
     if (schedulerConfig.mode === 'openclaw-cron') {
@@ -20,7 +34,7 @@ function resolveSchedulerBackend(runtimeConfig) {
     }
 
     if (schedulerConfig.mode === 'direct-worker') {
-        return createDirectWorkerBackend(schedulerConfig);
+        return createDirectWorkerBackend(schedulerConfig, options);
     }
 
     throw new Error(`Unsupported scheduler mode "${schedulerConfig.mode}". Expected "openclaw-cron" or "direct-worker".`);
@@ -113,22 +127,122 @@ function createOpenClawCronBackend(schedulerConfig) {
     };
 }
 
-function createDirectWorkerBackend(schedulerConfig) {
-    const notImplemented = () => {
-        throw new Error('Scheduler mode "direct-worker" is not implemented yet. Keep scheduler.mode="openclaw-cron" until the direct worker backend is added.');
+function createDirectWorkerBackend(schedulerConfig, options) {
+    const workspaceDir = path.resolve(options.workspaceDir || process.cwd());
+    const stateFilePath = path.resolve(workspaceDir, schedulerConfig.direct_worker.state_file);
+    const lockFilePath = path.resolve(workspaceDir, schedulerConfig.direct_worker.lock_file);
+
+    const readState = () => {
+        const stored = readJsonFile(stateFilePath);
+        if (!stored || typeof stored !== 'object') {
+            return {
+                scheduler_mode: 'direct-worker',
+                job_prefix: schedulerConfig.job_prefix,
+                jobs: []
+            };
+        }
+
+        return {
+            scheduler_mode: 'direct-worker',
+            job_prefix: schedulerConfig.job_prefix,
+            jobs: Array.isArray(stored.jobs) ? stored.jobs : []
+        };
+    };
+
+    const writeState = state => {
+        writeJsonFile(stateFilePath, state);
+    };
+
+    const upsertJob = job => {
+        const state = readState();
+        const existingIndex = state.jobs.findIndex(existingJob => existingJob.id === job.id);
+        const existingJob = existingIndex >= 0 ? state.jobs[existingIndex] : null;
+        const storedJob = {
+            ...(existingJob || {}),
+            ...job,
+            enabled: job.enabled !== false,
+            scheduler_mode: 'direct-worker',
+            updated_at: new Date().toISOString()
+        };
+
+        if (existingIndex >= 0) {
+            state.jobs[existingIndex] = storedJob;
+        } else {
+            state.jobs.push(storedJob);
+        }
+
+        writeState(state);
+        return storedJob;
     };
 
     return {
         mode: schedulerConfig.mode,
         jobPrefix: schedulerConfig.job_prefix,
-        registrationSupported: false,
+        registrationSupported: true,
         supportsFailureAlerts: false,
-        listJobs: notImplemented,
+        stateFilePath,
+        lockFilePath,
+        directWorkerConfig: schedulerConfig.direct_worker,
+        listJobs() {
+            return readState().jobs;
+        },
         listAgents: () => [],
-        removeJob: notImplemented,
-        addJob: notImplemented,
+        removeJob(jobId) {
+            const state = readState();
+            state.jobs = state.jobs.filter(job => job.id !== jobId);
+            writeState(state);
+        },
+        addJob(job, dryRun) {
+            const storedJob = {
+                id: job.id || job.name,
+                name: job.name,
+                description: job.description,
+                schedule: job.schedule,
+                timezone: job.timezone,
+                ceremonyCommand: job.ceremonyCommand,
+                projectId: job.projectId,
+                enabled: job.enabled !== false,
+                last_run_at: job.last_run_at || null,
+                last_success_at: job.last_success_at || null,
+                last_run_key: job.last_run_key || '',
+                consecutive_failures: Number.isInteger(job.consecutive_failures) ? job.consecutive_failures : 0,
+                last_error: job.last_error || '',
+                last_exit_code: job.last_exit_code === undefined ? null : job.last_exit_code,
+                last_output_preview: job.last_output_preview || '',
+                last_duration_ms: job.last_duration_ms === undefined ? null : job.last_duration_ms
+            };
+
+            if (dryRun) {
+                return {
+                    dryRun: true,
+                    stateFilePath,
+                    job: storedJob
+                };
+            }
+
+            return upsertJob(storedJob);
+        },
         applyFailureAlert: () => ({ skipped: true, reason: 'unsupported_backend' })
     };
+}
+
+function readJsonFile(filePath) {
+    if (!fs.existsSync(filePath)) {
+        return null;
+    }
+
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+}
+
+function writeJsonFile(filePath, value) {
+    ensureDir(path.dirname(filePath));
+    fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+}
+
+function ensureDir(dirPath) {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
 }
 
 function resolveOcl() {
