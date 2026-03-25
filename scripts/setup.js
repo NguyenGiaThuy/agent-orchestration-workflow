@@ -222,6 +222,22 @@ async function main() {
     fs.cpSync(TEMPLATE_DIR, OPENCLAW_DIR, { recursive: true }); ok('Scaffolded from template');
   }
 
+  // Step 1b: Install .openclaw/ dependencies
+  step('Installing .openclaw/ dependencies');
+  {
+    const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const installResult = spawnSync(npmCmd, ['install', '--prefer-offline'], {
+      cwd: OPENCLAW_DIR,
+      stdio: 'inherit',
+      shell: false
+    });
+    if (installResult.status !== 0) {
+      warn('npm install failed — orchestrator may not work. Run `npm install` inside .openclaw/ manually.');
+    } else {
+      ok('node_modules installed');
+    }
+  }
+
   // Patch openclaw command for Windows (WSL) — template defaults to native openclaw
   if (process.platform === 'win32') {
     patchYamlLine(RUNTIME_CFG, 'command', '"wsl"');
